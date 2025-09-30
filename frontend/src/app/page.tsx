@@ -3,9 +3,9 @@ import Link from "next/link";
 import { ArrowUpRight, CalendarDays, MapPin } from "lucide-react";
 
 import { EventMapClient } from "@/components/event-map.client";
+import { EventFilters } from "@/components/event-filters";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   Card,
   CardContent,
@@ -123,6 +123,34 @@ export default async function Home({
   let offset = (page - 1) * PAGE_SIZE;
   let useUpcomingFilter = true;
 
+  let summaryEventsResponse = await fetchEvents({ limit: 1, start_after: today });
+  if (summaryEventsResponse.items.length === 0) {
+    summaryEventsResponse = await fetchEvents({ limit: 1 });
+  }
+
+  let summaryLocations = await fetchEventLocations({ limit: 2000, start_after: today });
+  if (summaryLocations.length === 0) {
+    summaryLocations = await fetchEventLocations({ limit: 2000 });
+  }
+
+  const availableDistricts = Array.from(
+    new Set(
+      summaryLocations
+        .map((event) => event.guname)
+        .filter((value): value is string => typeof value === "string" && value.trim().length > 0),
+    ),
+  ).sort((a, b) => a.localeCompare(b, "ko"));
+
+  const availableFeeOptions = Array.from(
+    new Set(
+      summaryLocations
+        .map((event) => event.is_free)
+        .filter((value): value is string => typeof value === "string" && value.trim().length > 0),
+    ),
+  ).sort((a, b) => a.localeCompare(b, "ko"));
+
+  const summaryTotal = summaryEventsResponse.total;
+
   const searchValue = getParam("search");
   const selectedDistrict = getParam("guname");
   const selectedFee = getParam("is_free");
@@ -166,8 +194,8 @@ export default async function Home({
   }
 
   const events = eventsResponse.items;
-  const total = eventsResponse.total;
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const filteredTotal = eventsResponse.total;
+  const totalPages = Math.max(1, Math.ceil(filteredTotal / PAGE_SIZE));
   const hasPrev = page > 1;
   const hasNext = page < totalPages;
 
@@ -180,22 +208,6 @@ export default async function Home({
     locations = await fetchEventLocations(locationBaseFilters);
   }
 
-  const availableDistricts = Array.from(
-    new Set(
-      locations
-        .map((event) => event.guname)
-        .filter((value): value is string => typeof value === "string" && value.trim().length > 0),
-    ),
-  ).sort((a, b) => a.localeCompare(b, "ko"));
-
-  const availableFeeOptions = Array.from(
-    new Set(
-      locations
-        .map((event) => event.is_free)
-        .filter((value): value is string => typeof value === "string" && value.trim().length > 0),
-    ),
-  ).sort((a, b) => a.localeCompare(b, "ko"));
-
   const enriched = await Promise.all(
     events.map(async (event) => {
       const result = await fetchEventWithWeather(event.id, event.guname ?? undefined);
@@ -205,21 +217,23 @@ export default async function Home({
 
   const districtCount = availableDistricts.length;
   const hasActiveFilters = Boolean(searchValue || selectedDistrict || selectedFee);
-  const preservedQueryEntries = Object.entries(resolvedSearchParams ?? {}).filter(
-    ([key]) => !["search", "guname", "is_free", "page"].includes(key),
+  const preservedFilterParams = Object.entries(resolvedSearchParams ?? {}).reduce(
+    (acc, [key, value]) => {
+      if (["search", "guname", "is_free", "page"].includes(key)) {
+        return acc;
+      }
+      const values: string[] = Array.isArray(value)
+        ? value.filter((val): val is string => typeof val === "string" && val.length > 0)
+        : typeof value === "string" && value.length > 0
+        ? [value]
+        : [];
+      if (values.length > 0) {
+        acc[key] = values;
+      }
+      return acc;
+    },
+    {} as Record<string, string[]>,
   );
-  const hiddenInputs = preservedQueryEntries.flatMap((entry) => {
-    const [key, value] = entry;
-    if (Array.isArray(value)) {
-      return value
-        .filter((val): val is string => typeof val === "string" && val.length > 0)
-        .map((val, index) => ({ key: `${key}-${index}`, name: key, value: val }));
-    }
-    if (typeof value === "string" && value.length > 0) {
-      return [{ key, name: key, value }];
-    }
-    return [];
-  });
   const baseQuery: Record<string, string | string[]> = {};
 
   Object.entries(resolvedSearchParams ?? {}).forEach(([key, value]) => {
@@ -293,7 +307,7 @@ export default async function Home({
                 <div className="rounded-2xl border border-border/60 bg-card/70 p-4">
                   <p className="text-sm text-muted-foreground">총 이벤트</p>
                   <p className="mt-1 text-2xl font-semibold text-foreground">
-                    {total.toLocaleString()}건
+                    {summaryTotal.toLocaleString()}건
                   </p>
                   <p className="mt-2 text-xs text-muted-foreground">
                     서울 열린데이터 광장 기준, 오늘 및 이후 일정만 추려서 제공 중입니다.
@@ -344,77 +358,19 @@ export default async function Home({
           </div>
           <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
             <span className="rounded-full bg-secondary px-3 py-1">
-              {total.toLocaleString()}개의 최신 데이터
+              {filteredTotal.toLocaleString()}개의 최신 데이터
             </span>
             <span className="rounded-full bg-secondary px-3 py-1">{districtCount}개 자치구</span>
           </div>
         </div>
-        <form
-          className="space-y-4 rounded-2xl border border-border/60 bg-card/60 p-4 backdrop-blur"
-          method="get"
-        >
-          {hiddenInputs.map((item) => (
-            <input key={item.key} type="hidden" name={item.name} value={item.value} />
-          ))}
-          <div className="grid gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_auto]">
-            <div className="space-y-2">
-              <label htmlFor="search" className="text-sm font-medium text-muted-foreground">
-                행사 검색
-              </label>
-              <Input
-                id="search"
-                name="search"
-                defaultValue={searchValue ?? ""}
-                placeholder="행사명으로 검색하세요"
-                autoComplete="off"
-              />
-            </div>
-            <div className="space-y-2">
-              <label htmlFor="guname" className="text-sm font-medium text-muted-foreground">
-                지역
-              </label>
-              <select
-                id="guname"
-                name="guname"
-                defaultValue={selectedDistrict ?? ""}
-                className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <option value="">전체 지역</option>
-                {availableDistricts.map((district) => (
-                  <option key={district} value={district}>
-                    {district}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-2">
-              <label htmlFor="is_free" className="text-sm font-medium text-muted-foreground">
-                요금
-              </label>
-              <select
-                id="is_free"
-                name="is_free"
-                defaultValue={selectedFee ?? ""}
-                className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <option value="">전체</option>
-                {availableFeeOptions.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="flex items-end gap-2">
-              <Button type="submit" size="sm">
-                필터 적용
-              </Button>
-              <Button type="button" size="sm" variant="ghost" asChild>
-                <Link href="/">초기화</Link>
-              </Button>
-            </div>
-          </div>
-        </form>
+        <EventFilters
+          initialSearch={searchValue}
+          initialDistrict={selectedDistrict}
+          initialFee={selectedFee}
+          districts={availableDistricts}
+          feeOptions={availableFeeOptions}
+          preservedParams={preservedFilterParams}
+        />
         {enriched.length === 0 ? (
           <Card className="border-dashed">
             <CardContent className="py-12 text-center text-muted-foreground">
