@@ -23,12 +23,23 @@ async def create_action(
     if data.get("timestamp") is None:
         data["timestamp"] = datetime.now(timezone.utc)
 
-    action = UserAction(**data)
+    metadata_payload = data.pop("metadata", None)
+
+    action = UserAction(metadata_json=metadata_payload, **data)
     session.add(action)
     await session.commit()
     await session.refresh(action)
 
-    return UserActionRead.model_validate(action)
+    return UserActionRead.model_validate(
+        {
+            "id": action.id,
+            "user_id": action.user_id,
+            "action_type": action.action_type,
+            "target_id": action.target_id,
+            "timestamp": action.timestamp,
+            "metadata": action.metadata_json,
+        }
+    )
 
 
 @router.get("/popular")

@@ -18,13 +18,27 @@ class Settings(BaseSettings):
     )
 
     seoul_open_data_api_base: str = Field(
-        default="https://api.seoul.go.kr/openapi",
+        default="http://openapi.seoul.go.kr:8088",
         alias="SEOUL_OPEN_DATA_API_BASE",
     )
     seoul_open_data_api_key: str = Field(
         default="62716161486b6d6737334b53795872",
         alias="SEOUL_OPEN_DATA_API_KEY",
     )
+
+    kma_api_base: str = Field(
+        default="https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0",
+        alias="KMA_API_BASE",
+    )
+    kma_api_service_key: str = Field(
+        default="PLEASE_PROVIDE_KMA_KEY",
+        alias="KMA_API_SERVICE_KEY",
+    )
+    kma_default_location: str = Field(default="서울", alias="KMA_DEFAULT_LOCATION")
+    kma_default_nx: int = Field(default=60, alias="KMA_DEFAULT_NX")
+    kma_default_ny: int = Field(default=127, alias="KMA_DEFAULT_NY")
+
+    external_api_verify_ssl: bool = Field(default=True, alias="EXTERNAL_API_VERIFY_SSL")
 
 
 @lru_cache(maxsize=1)
