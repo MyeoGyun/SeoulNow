@@ -52,3 +52,18 @@ body {
 .site-main {
   @apply flex-1 w-full;
 }
+
+.district-label {
+  background: rgba(15, 23, 42, 0.78);
+  color: #f8fafc;
+  border: none;
+  box-shadow: 0 10px 25px rgba(15, 23, 42, 0.25);
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.35rem 0.6rem;
+}
+
+.district-label::before {
+  display: none;
+}

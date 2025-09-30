@@ -96,6 +96,7 @@ export default async function Home({
 }) {
   const resolvedSearchParams = await searchParams;
   const today = new Date().toISOString().split("T")[0];
+  const todayStart = new Date(`${today}T00:00:00Z`);
   const getParam = (key: string) => {
     const value = resolvedSearchParams?.[key];
     if (Array.isArray(value)) {
@@ -123,19 +124,27 @@ export default async function Home({
   let offset = (page - 1) * PAGE_SIZE;
   let useUpcomingFilter = true;
 
-  let summaryEventsResponse = await fetchEvents({ limit: 1, start_after: today });
-  if (summaryEventsResponse.items.length === 0) {
-    summaryEventsResponse = await fetchEvents({ limit: 1 });
-  }
+  const summaryEventsResponse = await fetchEvents({ limit: 1, start_after: today });
+  const filterUpcomingLocations = (locations: Awaited<ReturnType<typeof fetchEventLocations>>) =>
+    locations.filter((event) => {
+      if (!event.start_date) {
+        return true;
+      }
+      const startDate = new Date(event.start_date);
+      return startDate >= todayStart;
+    });
 
-  let summaryLocations = await fetchEventLocations({ limit: 2000, start_after: today });
-  if (summaryLocations.length === 0) {
-    summaryLocations = await fetchEventLocations({ limit: 2000 });
+  let overviewLocations = await fetchEventLocations({ limit: 2000, start_after: today });
+  overviewLocations = filterUpcomingLocations(overviewLocations);
+
+  if (overviewLocations.length === 0) {
+    const fallbackLocations = await fetchEventLocations({ limit: 2000 });
+    overviewLocations = filterUpcomingLocations(fallbackLocations);
   }
 
   const availableDistricts = Array.from(
     new Set(
-      summaryLocations
+      overviewLocations
         .map((event) => event.guname)
         .filter((value): value is string => typeof value === "string" && value.trim().length > 0),
     ),
@@ -143,13 +152,52 @@ export default async function Home({
 
   const availableFeeOptions = Array.from(
     new Set(
-      summaryLocations
+      overviewLocations
         .map((event) => event.is_free)
         .filter((value): value is string => typeof value === "string" && value.trim().length > 0),
     ),
   ).sort((a, b) => a.localeCompare(b, "ko"));
 
   const summaryTotal = summaryEventsResponse.total;
+
+  const isUpcomingEvent = (event: Event) => {
+    const toDate = (value?: string | null) => {
+      if (!value) return null;
+      const parsed = new Date(value);
+      return Number.isNaN(parsed.getTime()) ? null : parsed;
+    };
+
+    const startDate = toDate(event.start_date);
+    const endDate = toDate(event.end_date);
+
+    if (endDate && endDate >= todayStart) {
+      return true;
+    }
+    if (startDate && startDate >= todayStart) {
+      return true;
+    }
+
+    if (event.date) {
+      const [rawStart, rawEnd] = event.date.split("~").map((part) => part?.trim());
+      const parseDateOnly = (value?: string) => {
+        if (!value) return null;
+        const normalized = value.length === 10 ? `${value}T00:00:00Z` : value;
+        const parsed = new Date(normalized);
+        return Number.isNaN(parsed.getTime()) ? null : parsed;
+      };
+
+      const startFromString = parseDateOnly(rawStart);
+      const endFromString = parseDateOnly(rawEnd ?? rawStart);
+      if (endFromString && endFromString >= todayStart) {
+        return true;
+      }
+      if (startFromString && startFromString >= todayStart) {
+        return true;
+      }
+    }
+
+    return false;
+  };
 
   const searchValue = getParam("search");
   const selectedDistrict = getParam("guname");
@@ -193,20 +241,12 @@ export default async function Home({
     eventsResponse = await fetchEvents(params);
   }
 
-  const events = eventsResponse.items;
-  const filteredTotal = eventsResponse.total;
+  const upcomingEvents = eventsResponse.items.filter(isUpcomingEvent);
+  const events = upcomingEvents;
+  const filteredTotal = useUpcomingFilter ? eventsResponse.total : upcomingEvents.length;
   const totalPages = Math.max(1, Math.ceil(filteredTotal / PAGE_SIZE));
   const hasPrev = page > 1;
   const hasNext = page < totalPages;
-
-  const locationBaseFilters: EventQueryParams = { ...baseFilters, limit: 2000 };
-  const locationParams = useUpcomingFilter
-    ? { ...locationBaseFilters, start_after: today }
-    : locationBaseFilters;
-  let locations = await fetchEventLocations(locationParams);
-  if (locations.length === 0 && useUpcomingFilter) {
-    locations = await fetchEventLocations(locationBaseFilters);
-  }
 
   const enriched = await Promise.all(
     events.map(async (event) => {
@@ -215,7 +255,8 @@ export default async function Home({
     })
   );
 
-  const districtCount = availableDistricts.length;
+  const filteredDistrictCount = new Set(events.map((event) => event.guname).filter(Boolean)).size;
+  const districtCoverage = availableDistricts.length;
   const hasActiveFilters = Boolean(searchValue || selectedDistrict || selectedFee);
   const preservedFilterParams = Object.entries(resolvedSearchParams ?? {}).reduce(
     (acc, [key, value]) => {
@@ -258,6 +299,38 @@ export default async function Home({
     return { pathname: "/", query } as const;
   };
 
+  const MAX_PAGE_BUTTONS = 7;
+  const pagesToDisplay: Array<number | null> = (() => {
+    if (totalPages <= MAX_PAGE_BUTTONS) {
+      return Array.from({ length: totalPages }, (_, index) => index + 1);
+    }
+
+    const middleSlots = MAX_PAGE_BUTTONS - 2;
+    let start = Math.max(2, page - Math.floor(middleSlots / 2));
+    let end = start + middleSlots - 1;
+
+    if (end >= totalPages) {
+      end = totalPages - 1;
+      start = end - middleSlots + 1;
+    }
+
+    const pages: Array<number | null> = [1];
+    if (start > 2) {
+      pages.push(null);
+    }
+
+    for (let current = start; current <= end; current += 1) {
+      pages.push(current);
+    }
+
+    if (end < totalPages - 1) {
+      pages.push(null);
+    }
+
+    pages.push(totalPages);
+    return pages;
+  })();
+
   return (
     <div className="space-y-16 pb-16">
       <section className="relative mx-auto mt-10 w-full max-w-6xl overflow-hidden rounded-3xl border border-border bg-gradient-to-br from-primary/10 via-background to-background p-8 md:p-12">
@@ -271,7 +344,8 @@ export default async function Home({
                 서울에서 즐길 수 있는 모든 순간을 한눈에
               </h1>
               <p className="max-w-xl text-base text-muted-foreground md:text-lg">
-                전시, 공연, 축제부터 날씨 정보까지. 바쁜 일정 속에서도 가장 알찬 서울 라이프를 설계해 보세요.
+                전시, 공연, 축제부터 날씨 정보까지
+                바쁜 일정 속에서도 가장 알찬 서울 라이프를 즐겨보세요.
               </p>
             </div>
             <div className="flex flex-wrap gap-4">
@@ -294,7 +368,7 @@ export default async function Home({
               </Button>
             </div>
           </div>
-          <div className="relative h-[260px] rounded-3xl bg-gradient-to-br from-primary/20 via-primary/10 to-transparent p-6 md:h-full">
+          <div className="relative h-[16.25rem] rounded-3xl bg-gradient-to-br from-primary/20 via-primary/10 to-transparent p-6 md:h-full">
             <div className="absolute inset-0 -z-10 rounded-3xl bg-[radial-gradient(circle_at_top,_rgba(0,82,204,0.25),_transparent_70%)]" />
             <div className="flex h-full flex-col justify-center gap-6 text-foreground">
               <div className="space-y-2">
@@ -305,7 +379,7 @@ export default async function Home({
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="rounded-2xl border border-border/60 bg-card/70 p-4">
-                  <p className="text-sm text-muted-foreground">총 이벤트</p>
+                  <p className="text-sm text-muted-foreground">총 행사</p>
                   <p className="mt-1 text-2xl font-semibold text-foreground">
                     {summaryTotal.toLocaleString()}건
                   </p>
@@ -315,7 +389,7 @@ export default async function Home({
                 </div>
                 <div className="rounded-2xl border border-border/60 bg-card/70 p-4">
                   <p className="text-sm text-muted-foreground">자치구 커버리지</p>
-                  <p className="mt-1 text-2xl font-semibold text-foreground">{districtCount}곳</p>
+                  <p className="mt-1 text-2xl font-semibold text-foreground">{districtCoverage}곳</p>
                   <p className="mt-2 text-xs text-muted-foreground">
                     지도에서 관심 구역을 클릭하면 상세 정보와 외부 링크를 확인할 수 있습니다.
                   </p>
@@ -343,7 +417,13 @@ export default async function Home({
         </div>
         <Card className="overflow-hidden border-border bg-card/70 backdrop-blur">
           <CardContent className="p-0">
-            <EventMapClient events={locations} />
+            <EventMapClient
+              events={overviewLocations}
+              preservedParams={preservedFilterParams}
+              searchValue={searchValue}
+              selectedFee={selectedFee}
+              selectedDistrict={selectedDistrict ?? null}
+            />
           </CardContent>
         </Card>
       </section>
@@ -360,7 +440,7 @@ export default async function Home({
             <span className="rounded-full bg-secondary px-3 py-1">
               {filteredTotal.toLocaleString()}개의 최신 데이터
             </span>
-            <span className="rounded-full bg-secondary px-3 py-1">{districtCount}개 자치구</span>
+            <span className="rounded-full bg-secondary px-3 py-1">{filteredDistrictCount}개 자치구</span>
           </div>
         </div>
         <EventFilters
@@ -382,12 +462,13 @@ export default async function Home({
         ) : (
           <>
             <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
-              {enriched.map(({ event, weather }) => {
-                const eventUrl = event.hmpg_addr ?? event.org_link ?? "#";
-                const isExternal = eventUrl.startsWith("http");
+            {enriched.map(({ event, weather }) => {
+              const eventUrl = event.hmpg_addr ?? event.org_link ?? "#";
+              const isExternal = eventUrl.startsWith("http");
+              const feeText = event.use_fee ?? event.ticket ?? event.is_free ?? null;
 
-                return (
-                  <Card
+              return (
+                <Card
                   key={event.id}
                   className="group h-full overflow-hidden border-border bg-card/80 transition duration-200 hover:-translate-y-1 hover:border-primary/40 hover:shadow-xl"
                 >
@@ -432,7 +513,7 @@ export default async function Home({
                           src={event.main_img}
                           alt={event.title}
                           fill
-                          sizes="(max-width: 768px) 100vw, 400px"
+                          sizes="(max-width: 48rem) 100vw, 25rem"
                           className="object-cover transition duration-500 group-hover:scale-[1.03]"
                         />
                       </div>
@@ -440,6 +521,11 @@ export default async function Home({
                     <CardContent className="space-y-4">
                       {event.guname && (
                         <p className="text-sm text-muted-foreground">{event.guname}에서 열리는 행사</p>
+                      )}
+                      {feeText && (
+                        <p className="text-sm font-medium text-primary">
+                          {feeText}
+                        </p>
                       )}
                       <WeatherSummary weather={weather} />
                     </CardContent>
@@ -453,7 +539,10 @@ export default async function Home({
               })}
             </div>
             {(hasPrev || hasNext) && (
-              <nav className="flex items-center justify-between pt-6" aria-label="이벤트 페이지 네비게이션">
+              <nav
+                className="flex items-center justify-center gap-3 pt-6"
+                aria-label="이벤트 페이지 네비게이션"
+              >
                 {hasPrev ? (
                   <Button variant="outline" size="sm" asChild>
                     <Link href={buildPageLink(page - 1)}>이전</Link>
@@ -463,9 +552,31 @@ export default async function Home({
                     이전
                   </Button>
                 )}
-                <span className="text-sm text-muted-foreground">
-                  {page} / {totalPages} 페이지
-                </span>
+                <div className="flex items-center gap-1">
+                  {pagesToDisplay.map((pageNumber, index) => {
+                    if (pageNumber === null) {
+                      return (
+                        <span key={`ellipsis-${index}`} className="px-2 text-xs text-muted-foreground">
+                          …
+                        </span>
+                      );
+                    }
+
+                    if (pageNumber === page) {
+                      return (
+                        <Button key={pageNumber} size="sm" disabled>
+                          {pageNumber}
+                        </Button>
+                      );
+                    }
+
+                    return (
+                      <Button key={pageNumber} variant="outline" size="sm" asChild>
+                        <Link href={buildPageLink(pageNumber)}>{pageNumber}</Link>
+                      </Button>
+                    );
+                  })}
+                </div>
                 {hasNext ? (
                   <Button variant="outline" size="sm" asChild>
                     <Link href={buildPageLink(page + 1)}>다음</Link>

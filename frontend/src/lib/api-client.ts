@@ -16,6 +16,8 @@ export type Event = {
   hmpg_addr?: string | null;
   theme_code?: string | null;
   main_img?: string | null;
+  use_fee?: string | null;
+  ticket?: string | null;
   is_free?: string | null;
   lat?: number | null;
   lot?: number | null;

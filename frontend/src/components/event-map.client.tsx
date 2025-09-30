@@ -14,8 +14,26 @@ const LeafletMap = dynamic(() => import('./event-map').then((mod) => mod.EventMa
 
 interface EventMapClientProps {
   events: EventLocation[];
+  preservedParams: Record<string, string[]>;
+  searchValue?: string | null;
+  selectedFee?: string | null;
+  selectedDistrict?: string | null;
 }
 
-export function EventMapClient({ events }: EventMapClientProps) {
-  return <LeafletMap events={events} />;
+export function EventMapClient({
+  events,
+  preservedParams,
+  searchValue,
+  selectedFee,
+  selectedDistrict,
+}: EventMapClientProps) {
+  return (
+    <LeafletMap
+      events={events}
+      preservedParams={preservedParams}
+      searchValue={searchValue}
+      selectedFee={selectedFee}
+      selectedDistrict={selectedDistrict}
+    />
+  );
 }
