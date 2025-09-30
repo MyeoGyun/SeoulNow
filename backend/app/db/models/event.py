@@ -13,7 +13,7 @@ class Event(Base):
 
     __tablename__ = "events"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
     codename: Mapped[str | None] = mapped_column(String(255), nullable=True)
     guname: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     title: Mapped[str] = mapped_column(String(500), nullable=False)

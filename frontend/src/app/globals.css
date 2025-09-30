@@ -1,0 +1,54 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@1.3.9/dist/web/variable/pretendardvariable.css");
+
+:root {
+  --background: 240 33% 97%;
+  --foreground: 209 30% 16%;
+  --card: 0 0% 100%;
+  --card-foreground: 209 30% 16%;
+  --muted: 215 16% 88%;
+  --muted-foreground: 216 15% 47%;
+  --accent: 214 100% 40%;
+  --accent-foreground: 210 40% 98%;
+  --primary: 214 100% 40%;
+  --primary-foreground: 210 40% 98%;
+  --secondary: 220 14% 96%;
+  --secondary-foreground: 221 39% 11%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 214 32% 91%;
+  --input: 214 32% 91%;
+  --ring: 214 100% 40%;
+  --radius: 0.75rem;
+}
+
+html,
+body {
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+
+body {
+  @apply bg-background text-foreground antialiased;
+  font-family: 'Pretendard Variable', 'Pretendard', -apple-system, BlinkMacSystemFont,
+    'Segoe UI', system-ui, sans-serif;
+}
+
+.app-shell {
+  @apply flex min-h-screen flex-col bg-background;
+}
+
+.site-header {
+  @apply mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-6;
+}
+
+.site-logo {
+  @apply text-2xl font-semibold tracking-tight text-foreground transition-colors hover:text-primary;
+}
+
+.site-main {
+  @apply flex-1 w-full;
+}

@@ -19,4 +19,4 @@ class UserAction(Base):
     action_type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     target_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
-    metadata: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    metadata_json: Mapped[dict | None] = mapped_column("metadata", JSONB, nullable=True)
