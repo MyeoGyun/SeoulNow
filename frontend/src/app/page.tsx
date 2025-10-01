@@ -23,7 +23,7 @@ import {
   type Weather,
 } from "@/lib/api-client";
 
-export const dynamic = "force-dynamic"; // Avoid stale static builds when backend is offline during CI
+export const revalidate = 300; // Revalidate data every 5 minutes while keeping ISR benefits
 
 const PAGE_SIZE = 12;
 
@@ -94,7 +94,7 @@ export default async function Home({
 }: {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const resolvedSearchParams = await searchParams;
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
   const today = new Date().toISOString().split("T")[0];
   const getParam = (key: string) => {
     const value = resolvedSearchParams?.[key];
@@ -344,7 +344,13 @@ export default async function Home({
         </div>
         <Card className="overflow-hidden border-border bg-card/70 backdrop-blur">
           <CardContent className="p-0">
-            <EventMapClient events={locations} />
+            <EventMapClient
+              events={locations}
+              preservedParams={preservedFilterParams}
+              searchValue={searchValue ?? null}
+              selectedFee={selectedFee ?? null}
+              selectedDistrict={selectedDistrict ?? null}
+            />
           </CardContent>
         </Card>
       </section>
@@ -428,12 +434,13 @@ export default async function Home({
                       </CardDescription>
                     </CardHeader>
                     {event.main_img && (
-                      <div className="relative mx-6 h-44 overflow-hidden rounded-2xl border border-border">
+                      <div className="relative mx-6 aspect-[4/3] overflow-hidden rounded-2xl border border-border">
                         <Image
                           src={event.main_img}
                           alt={event.title}
                           fill
                           sizes="(max-width: 48rem) 100vw, 25rem"
+                          loading="lazy"
                           className="object-cover transition duration-500 group-hover:scale-[1.03]"
                         />
                       </div>
