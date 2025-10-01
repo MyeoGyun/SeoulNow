@@ -1,6 +1,8 @@
 from functools import lru_cache
+import json
+from typing import Annotated
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -39,6 +41,30 @@ class Settings(BaseSettings):
     kma_default_ny: int = Field(default=127, alias="KMA_DEFAULT_NY")
 
     external_api_verify_ssl: bool = Field(default=True, alias="EXTERNAL_API_VERIFY_SSL")
+    cors_origins: Annotated[str | list[str], Field(alias="CORS_ORIGINS", default="http://localhost:3000")]
+
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def _split_cors_origins(cls, value: str | list[str] | None) -> list[str]:
+        if value is None:
+            return []
+        if isinstance(value, str):
+            stripped = value.strip()
+            if not stripped:
+                return []
+            if stripped.startswith("["):
+                try:
+                    parsed = json.loads(stripped)
+                    if isinstance(parsed, list):
+                        return [str(item).strip() for item in parsed if str(item).strip()]
+                except json.JSONDecodeError:
+                    pass
+            return [origin.strip() for origin in stripped.split(",") if origin.strip()]
+        return [origin.strip() for origin in value if isinstance(origin, str) and origin.strip()]
+
+    @property
+    def allowed_cors_origins(self) -> list[str]:
+        return self.cors_origins
 
 
 @lru_cache(maxsize=1)

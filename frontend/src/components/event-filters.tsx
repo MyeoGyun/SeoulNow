@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import type { KeyboardEvent } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
@@ -30,13 +31,12 @@ export function EventFilters({
   const [search, setSearch] = useState(initialSearch ?? "");
   const [district, setDistrict] = useState(initialDistrict ?? "");
   const [fee, setFee] = useState(initialFee ?? "");
-  const [isPending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
   const [isMounted, setIsMounted] = useState(false);
-  const [hasSearchChanged, setHasSearchChanged] = useState(false);
+  const blurTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     setSearch(initialSearch ?? "");
-    setHasSearchChanged(false);
   }, [initialSearch]);
 
   useEffect(() => {
@@ -52,6 +52,10 @@ export function EventFilters({
   }, []);
 
   const applyFilters = (nextSearch = search, nextDistrict = district, nextFee = fee) => {
+    if (!isMounted) {
+      return;
+    }
+
     const params = new URLSearchParams();
 
     Object.entries(preservedParams).forEach(([key, values]) => {
@@ -88,22 +92,8 @@ export function EventFilters({
     });
   };
 
-  useEffect(() => {
-    if (!isMounted || !hasSearchChanged) {
-      return;
-    }
-
-    const handler = setTimeout(() => {
-      applyFilters(search, district, fee);
-    }, 400);
-
-    return () => clearTimeout(handler);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, hasSearchChanged]);
-
   const handleSearchChange = (value: string) => {
     setSearch(value);
-    setHasSearchChanged(true);
   };
 
   const handleDistrictChange = (value: string) => {
@@ -115,6 +105,34 @@ export function EventFilters({
     setFee(value);
     applyFilters(search, district, value);
   };
+
+  const handleSearchKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      applyFilters(search.trim(), district, fee);
+    }
+  };
+
+  const handleInputFocus = () => {
+    if (blurTimeoutRef.current) {
+      clearTimeout(blurTimeoutRef.current);
+      blurTimeoutRef.current = null;
+    }
+  };
+
+  const handleInputBlur = () => {
+    blurTimeoutRef.current = setTimeout(() => {
+      blurTimeoutRef.current = null;
+    }, 120);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (blurTimeoutRef.current) {
+        clearTimeout(blurTimeoutRef.current);
+      }
+    };
+  }, []);
 
   return (
     <div className="space-y-4 rounded-2xl border border-border/60 bg-card/60 p-4 backdrop-blur">
@@ -129,7 +147,10 @@ export function EventFilters({
             value={search}
             placeholder="행사명으로 검색하세요"
             autoComplete="off"
+            onFocus={handleInputFocus}
+            onBlur={handleInputBlur}
             onChange={(event) => handleSearchChange(event.target.value)}
+            onKeyDown={handleSearchKeyDown}
           />
         </div>
         <div className="space-y-2">
@@ -170,10 +191,7 @@ export function EventFilters({
             ))}
           </select>
         </div>
-        <div className="flex items-end gap-2">
-          <Button type="button" size="sm" onClick={() => applyFilters()} disabled={isPending}>
-            필터 적용
-          </Button>
+        <div className="flex items-end">
           <Button type="button" size="sm" variant="ghost" asChild>
             <Link href="/">초기화</Link>
           </Button>
@@ -182,3 +200,4 @@ export function EventFilters({
     </div>
   );
 }
+
