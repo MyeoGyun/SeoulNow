@@ -42,11 +42,11 @@ body {
 }
 
 .site-header {
-  @apply mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-6;
+  @apply mx-auto w-full max-w-6xl px-6 py-6;
 }
 
 .site-logo {
-  @apply text-2xl font-semibold tracking-tight text-foreground transition-colors hover:text-primary;
+  @apply text-2xl font-semibold tracking-tight text-primary transition-colors hover:text-primary/80;
 }
 
 .site-main {
