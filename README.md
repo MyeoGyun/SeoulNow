@@ -92,6 +92,11 @@ docker compose exec backend curl -X POST http://localhost:8000/api/events/sync
 
 향후 확장 시 ALB + ACM, RDS, CloudFront/S3 등을 이용해 무중단/고가용 구성으로 전환할 수 있습니다.
 
+### CI/CD (GitHub Actions → EC2)
+- `main` 브랜치에 푸시되면 `.github/workflows/deploy-ec2.yml`이 실행되어 EC2 인스턴스로 SSH 배포를 수행합니다.
+- 배포 스크립트와 상세 안내는 [`deploy/README.md`](deploy/README.md)를 참고하세요.
+- 필요한 GitHub Secrets: `EC2_HOST`, `EC2_USER`, `EC2_SSH_KEY`, `EC2_DEPLOY_PATH` (옵션: `EC2_SSH_PORT`, `EC2_COMPOSE_FILE`).
+
 ---
 
 ## 📌 향후 확장 아이디어

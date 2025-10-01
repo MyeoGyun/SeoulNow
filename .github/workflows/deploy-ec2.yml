@@ -1,0 +1,43 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: Deploy via SSH
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Prepare deploy script
+        run: |
+          mkdir -p artifacts
+          cp deploy/ec2-deploy.sh artifacts/
+
+      - name: Copy deploy script to EC2
+        uses: burnett01/rsync-deployments@v1.2
+        with:
+          switches: -avz --delete
+          path: artifacts/
+          remote_path: ${{ secrets.EC2_DEPLOY_PATH }}/tmp-deploy
+          remote_host: ${{ secrets.EC2_HOST }}
+          remote_port: ${{ secrets.EC2_SSH_PORT || '22' }}
+          remote_user: ${{ secrets.EC2_USER }}
+          remote_key: ${{ secrets.EC2_SSH_KEY }}
+
+      - name: Run remote deploy
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: ${{ secrets.EC2_SSH_PORT || '22' }}
+          script: |
+            chmod +x ${{ secrets.EC2_DEPLOY_PATH }}/tmp-deploy/ec2-deploy.sh
+            ${{ secrets.EC2_DEPLOY_PATH }}/tmp-deploy/ec2-deploy.sh ${{ secrets.EC2_DEPLOY_PATH }} ${{ secrets.EC2_COMPOSE_FILE || 'docker-compose.yml' }}
+            rm -rf ${{ secrets.EC2_DEPLOY_PATH }}/tmp-deploy
