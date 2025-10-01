@@ -96,7 +96,6 @@ export default async function Home({
 }) {
   const resolvedSearchParams = await searchParams;
   const today = new Date().toISOString().split("T")[0];
-  const todayStart = new Date(`${today}T00:00:00Z`);
   const getParam = (key: string) => {
     const value = resolvedSearchParams?.[key];
     if (Array.isArray(value)) {
@@ -124,27 +123,19 @@ export default async function Home({
   let offset = (page - 1) * PAGE_SIZE;
   let useUpcomingFilter = true;
 
-  const summaryEventsResponse = await fetchEvents({ limit: 1, start_after: today });
-  const filterUpcomingLocations = (locations: Awaited<ReturnType<typeof fetchEventLocations>>) =>
-    locations.filter((event) => {
-      if (!event.start_date) {
-        return true;
-      }
-      const startDate = new Date(event.start_date);
-      return startDate >= todayStart;
-    });
+  let summaryEventsResponse = await fetchEvents({ limit: 1, start_after: today });
+  if (summaryEventsResponse.items.length === 0) {
+    summaryEventsResponse = await fetchEvents({ limit: 1 });
+  }
 
-  let overviewLocations = await fetchEventLocations({ limit: 2000, start_after: today });
-  overviewLocations = filterUpcomingLocations(overviewLocations);
-
-  if (overviewLocations.length === 0) {
-    const fallbackLocations = await fetchEventLocations({ limit: 2000 });
-    overviewLocations = filterUpcomingLocations(fallbackLocations);
+  let summaryLocations = await fetchEventLocations({ limit: 2000, start_after: today });
+  if (summaryLocations.length === 0) {
+    summaryLocations = await fetchEventLocations({ limit: 2000 });
   }
 
   const availableDistricts = Array.from(
     new Set(
-      overviewLocations
+      summaryLocations
         .map((event) => event.guname)
         .filter((value): value is string => typeof value === "string" && value.trim().length > 0),
     ),
@@ -152,52 +143,13 @@ export default async function Home({
 
   const availableFeeOptions = Array.from(
     new Set(
-      overviewLocations
+      summaryLocations
         .map((event) => event.is_free)
         .filter((value): value is string => typeof value === "string" && value.trim().length > 0),
     ),
   ).sort((a, b) => a.localeCompare(b, "ko"));
 
   const summaryTotal = summaryEventsResponse.total;
-
-  const isUpcomingEvent = (event: Event) => {
-    const toDate = (value?: string | null) => {
-      if (!value) return null;
-      const parsed = new Date(value);
-      return Number.isNaN(parsed.getTime()) ? null : parsed;
-    };
-
-    const startDate = toDate(event.start_date);
-    const endDate = toDate(event.end_date);
-
-    if (endDate && endDate >= todayStart) {
-      return true;
-    }
-    if (startDate && startDate >= todayStart) {
-      return true;
-    }
-
-    if (event.date) {
-      const [rawStart, rawEnd] = event.date.split("~").map((part) => part?.trim());
-      const parseDateOnly = (value?: string) => {
-        if (!value) return null;
-        const normalized = value.length === 10 ? `${value}T00:00:00Z` : value;
-        const parsed = new Date(normalized);
-        return Number.isNaN(parsed.getTime()) ? null : parsed;
-      };
-
-      const startFromString = parseDateOnly(rawStart);
-      const endFromString = parseDateOnly(rawEnd ?? rawStart);
-      if (endFromString && endFromString >= todayStart) {
-        return true;
-      }
-      if (startFromString && startFromString >= todayStart) {
-        return true;
-      }
-    }
-
-    return false;
-  };
 
   const searchValue = getParam("search");
   const selectedDistrict = getParam("guname");
@@ -241,12 +193,20 @@ export default async function Home({
     eventsResponse = await fetchEvents(params);
   }
 
-  const upcomingEvents = eventsResponse.items.filter(isUpcomingEvent);
-  const events = upcomingEvents;
-  const filteredTotal = useUpcomingFilter ? eventsResponse.total : upcomingEvents.length;
+  const events = eventsResponse.items;
+  const filteredTotal = eventsResponse.total;
   const totalPages = Math.max(1, Math.ceil(filteredTotal / PAGE_SIZE));
   const hasPrev = page > 1;
   const hasNext = page < totalPages;
+
+  const locationBaseFilters: EventQueryParams = { ...baseFilters, limit: 2000 };
+  const locationParams = useUpcomingFilter
+    ? { ...locationBaseFilters, start_after: today }
+    : locationBaseFilters;
+  let locations = await fetchEventLocations(locationParams);
+  if (locations.length === 0 && useUpcomingFilter) {
+    locations = await fetchEventLocations(locationBaseFilters);
+  }
 
   const enriched = await Promise.all(
     events.map(async (event) => {
@@ -255,8 +215,7 @@ export default async function Home({
     })
   );
 
-  const filteredDistrictCount = new Set(events.map((event) => event.guname).filter(Boolean)).size;
-  const districtCoverage = availableDistricts.length;
+  const districtCount = availableDistricts.length;
   const hasActiveFilters = Boolean(searchValue || selectedDistrict || selectedFee);
   const preservedFilterParams = Object.entries(resolvedSearchParams ?? {}).reduce(
     (acc, [key, value]) => {
@@ -298,38 +257,6 @@ export default async function Home({
 
     return { pathname: "/", query } as const;
   };
-
-  const MAX_PAGE_BUTTONS = 7;
-  const pagesToDisplay: Array<number | null> = (() => {
-    if (totalPages <= MAX_PAGE_BUTTONS) {
-      return Array.from({ length: totalPages }, (_, index) => index + 1);
-    }
-
-    const middleSlots = MAX_PAGE_BUTTONS - 2;
-    let start = Math.max(2, page - Math.floor(middleSlots / 2));
-    let end = start + middleSlots - 1;
-
-    if (end >= totalPages) {
-      end = totalPages - 1;
-      start = end - middleSlots + 1;
-    }
-
-    const pages: Array<number | null> = [1];
-    if (start > 2) {
-      pages.push(null);
-    }
-
-    for (let current = start; current <= end; current += 1) {
-      pages.push(current);
-    }
-
-    if (end < totalPages - 1) {
-      pages.push(null);
-    }
-
-    pages.push(totalPages);
-    return pages;
-  })();
 
   return (
     <div className="space-y-16 pb-16">
@@ -388,8 +315,8 @@ export default async function Home({
                   </p>
                 </div>
                 <div className="rounded-2xl border border-border/60 bg-card/70 p-4">
-                  <p className="text-sm text-muted-foreground">자치구 커버리지</p>
-                  <p className="mt-1 text-2xl font-semibold text-foreground">{districtCoverage}곳</p>
+                  <p className="text-sm text-muted-foreground">총 행사 진행 자치구</p>
+                  <p className="mt-1 text-2xl font-semibold text-foreground">{districtCount}곳</p>
                   <p className="mt-2 text-xs text-muted-foreground">
                     지도에서 관심 구역을 클릭하면 상세 정보와 외부 링크를 확인할 수 있습니다.
                   </p>
@@ -417,13 +344,7 @@ export default async function Home({
         </div>
         <Card className="overflow-hidden border-border bg-card/70 backdrop-blur">
           <CardContent className="p-0">
-            <EventMapClient
-              events={overviewLocations}
-              preservedParams={preservedFilterParams}
-              searchValue={searchValue}
-              selectedFee={selectedFee}
-              selectedDistrict={selectedDistrict ?? null}
-            />
+            <EventMapClient events={locations} />
           </CardContent>
         </Card>
       </section>
@@ -440,7 +361,7 @@ export default async function Home({
             <span className="rounded-full bg-secondary px-3 py-1">
               {filteredTotal.toLocaleString()}개의 최신 데이터
             </span>
-            <span className="rounded-full bg-secondary px-3 py-1">{filteredDistrictCount}개 자치구</span>
+            <span className="rounded-full bg-secondary px-3 py-1">{districtCount}개 자치구</span>
           </div>
         </div>
         <EventFilters
@@ -462,13 +383,12 @@ export default async function Home({
         ) : (
           <>
             <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
-            {enriched.map(({ event, weather }) => {
-              const eventUrl = event.hmpg_addr ?? event.org_link ?? "#";
-              const isExternal = eventUrl.startsWith("http");
-              const feeText = event.use_fee ?? event.ticket ?? event.is_free ?? null;
+              {enriched.map(({ event, weather }) => {
+                const eventUrl = event.hmpg_addr ?? event.org_link ?? "#";
+                const isExternal = eventUrl.startsWith("http");
 
-              return (
-                <Card
+                return (
+                  <Card
                   key={event.id}
                   className="group h-full overflow-hidden border-border bg-card/80 transition duration-200 hover:-translate-y-1 hover:border-primary/40 hover:shadow-xl"
                 >
@@ -522,11 +442,6 @@ export default async function Home({
                       {event.guname && (
                         <p className="text-sm text-muted-foreground">{event.guname}에서 열리는 행사</p>
                       )}
-                      {feeText && (
-                        <p className="text-sm font-medium text-primary">
-                          {feeText}
-                        </p>
-                      )}
                       <WeatherSummary weather={weather} />
                     </CardContent>
                     <CardFooter className="mt-auto flex items-center justify-between border-t border-border/70 bg-card/80 px-6 py-4 text-sm text-muted-foreground">
@@ -539,10 +454,7 @@ export default async function Home({
               })}
             </div>
             {(hasPrev || hasNext) && (
-              <nav
-                className="flex items-center justify-center gap-3 pt-6"
-                aria-label="이벤트 페이지 네비게이션"
-              >
+              <nav className="flex items-center justify-between pt-6" aria-label="이벤트 페이지 네비게이션">
                 {hasPrev ? (
                   <Button variant="outline" size="sm" asChild>
                     <Link href={buildPageLink(page - 1)}>이전</Link>
@@ -552,31 +464,9 @@ export default async function Home({
                     이전
                   </Button>
                 )}
-                <div className="flex items-center gap-1">
-                  {pagesToDisplay.map((pageNumber, index) => {
-                    if (pageNumber === null) {
-                      return (
-                        <span key={`ellipsis-${index}`} className="px-2 text-xs text-muted-foreground">
-                          …
-                        </span>
-                      );
-                    }
-
-                    if (pageNumber === page) {
-                      return (
-                        <Button key={pageNumber} size="sm" disabled>
-                          {pageNumber}
-                        </Button>
-                      );
-                    }
-
-                    return (
-                      <Button key={pageNumber} variant="outline" size="sm" asChild>
-                        <Link href={buildPageLink(pageNumber)}>{pageNumber}</Link>
-                      </Button>
-                    );
-                  })}
-                </div>
+                <span className="text-sm text-muted-foreground">
+                  {page} / {totalPages} 페이지
+                </span>
                 {hasNext ? (
                   <Button variant="outline" size="sm" asChild>
                     <Link href={buildPageLink(page + 1)}>다음</Link>
