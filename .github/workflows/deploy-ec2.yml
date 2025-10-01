@@ -14,21 +14,25 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Prepare deploy script
-        run: |
-          mkdir -p artifacts
-          cp deploy/ec2-deploy.sh artifacts/
-
-      - name: Copy deploy script to EC2
-        uses: burnett01/rsync-deployments@v1.2
+      - name: Ensure temporary deploy directory
+        uses: appleboy/ssh-action@v1.0.0
         with:
-          switches: -avz --delete
-          path: artifacts/
-          remote_path: ${{ secrets.EC2_DEPLOY_PATH }}/tmp-deploy
-          remote_host: ${{ secrets.EC2_HOST }}
-          remote_port: ${{ secrets.EC2_SSH_PORT || '22' }}
-          remote_user: ${{ secrets.EC2_USER }}
-          remote_key: ${{ secrets.EC2_SSH_KEY }}
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: ${{ secrets.EC2_SSH_PORT || '22' }}
+          script: |
+            mkdir -p ${{ secrets.EC2_DEPLOY_PATH }}/tmp-deploy
+
+      - name: Upload deploy script
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: ${{ secrets.EC2_SSH_PORT || '22' }}
+          source: deploy/ec2-deploy.sh
+          target: ${{ secrets.EC2_DEPLOY_PATH }}/tmp-deploy/
 
       - name: Run remote deploy
         uses: appleboy/ssh-action@v1.0.0
