@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import "./globals.css";
 import { SiteLogo } from "@/components/site-logo";
 import { TopNavigator } from "@/components/top-navigator";
@@ -26,7 +27,9 @@ export default function RootLayout({
             </div>
             <div className="site-header-nav">
               <div className="site-header-nav-inner">
-                <TopNavigator />
+                <Suspense fallback={<div className="h-8 w-48 bg-muted/20 rounded animate-pulse mx-auto" />}>
+                  <TopNavigator />
+                </Suspense>
               </div>
             </div>
           </header>
