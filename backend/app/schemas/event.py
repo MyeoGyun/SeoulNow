@@ -60,5 +60,5 @@ class EventLocation(ORMBase):
 class EventListResponse(ORMBase):
     items: list[EventRead]
     total: int
-    limit: int
+    limit: int | None
     offset: int
