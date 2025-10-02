@@ -1,8 +1,6 @@
 import Link from "next/link";
 
-import { EventMapClient } from "@/components/event-map.client";
 import { EventFilters } from "@/components/event-filters";
-import { HomeTabs } from "@/components/home-tabs";
 import { InfoTabs } from "@/components/info-tabs";
 import { EventCard } from "@/components/event-card";
 import { Button } from "@/components/ui/button";
@@ -309,31 +307,9 @@ export default async function Home({
 
   const exploreTabContent = (
     <>
-      <section id="map" className="space-y-6">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h2 className="text-2xl font-semibold text-foreground">서울 문화 지도</h2>
-            <p className="text-sm text-muted-foreground">
-              행사 위치를 지도로 탐색하고, 관심 있는 지역을 확대해 세부 정보를 살펴보세요.
-            </p>
-          </div>
-        </div>
-        <Card className="overflow-hidden border-border bg-card/70 backdrop-blur">
-          <CardContent className="p-0">
-            <EventMapClient
-              events={locations}
-              preservedParams={preservedFilterParams}
-              searchValue={searchValue ?? null}
-              selectedFee={selectedFee ?? null}
-              selectedDistrict={selectedDistrict ?? null}
-            />
-          </CardContent>
-        </Card>
-      </section>
-
       <section className="space-y-6">
         <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-          <h2 className="text-2xl font-semibold text-foreground">오늘의 추천</h2>
+          <h2 className="text-2xl font-semibold text-foreground">다가오는 행사</h2>
           <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
             <span className="rounded-full bg-secondary px-3 py-1">
               {filteredTotal.toLocaleString()}개의 최신 데이터
@@ -403,33 +379,41 @@ export default async function Home({
   );
 
 
-  const homeTabs = [
-    {
-      id: "explore",
-      label: "서울 행사 모아보기",
-      content: exploreTabContent,
-    },
-    {
-      id: "stats",
-      label: "서울 행사 통계 현황",
-      content: statsTabContent,
-    },
-  ];
 
   return (
-    <div className="space-y-16 pb-16">
-      <section className="relative mx-auto mt-10 w-full max-w-6xl overflow-hidden rounded-3xl border border-border bg-gradient-to-br from-primary/10 via-background to-background p-6 sm:p-8 md:p-12">
-        <div className="space-y-6 text-center md:text-left">
-          <h1 className="text-3xl font-semibold leading-tight text-foreground sm:text-4xl md:text-5xl">
-            서울에서 즐길 수 있는 모든 순간을 한눈에
-          </h1>
-          <p className="mx-auto max-w-xl text-base text-muted-foreground md:mx-0 md:text-lg">
-            전시, 공연, 축제 정보를 한곳에서 확인하고, 실시간 추천과 지도 탐색으로 일정 계획을 더 빠르게 세워보세요.
-          </p>
-        </div>
-      </section>
-
-      <HomeTabs defaultTabId="explore" tabs={homeTabs} className="container max-w-6xl space-y-10 px-6" />
+    <div className="pt-8 pb-16">
+      {(() => {
+        const viewParam = resolvedSearchParams?.view;
+        if (viewParam === "stats") {
+          return (
+            <div className="container max-w-6xl space-y-8 px-6">
+              {statsTabContent}
+            </div>
+          );
+        }
+        if (viewParam === "calendar") {
+          return (
+            <div className="container max-w-6xl space-y-8 px-6">
+              <section className="space-y-6">
+                <div className="text-center">
+                  <h2 className="text-2xl font-semibold text-foreground">일정 캘린더</h2>
+                  <p className="text-sm text-muted-foreground mt-2">캘린더 뷰는 곧 업데이트될 예정입니다.</p>
+                </div>
+                <Card className="border-dashed">
+                  <CardContent className="py-12 text-center text-muted-foreground">
+                    캘린더 기능을 준비 중입니다.
+                  </CardContent>
+                </Card>
+              </section>
+            </div>
+          );
+        }
+        return (
+          <div className="container max-w-6xl space-y-8 px-6">
+            {exploreTabContent}
+          </div>
+        );
+      })()}
     </div>
   );
 }

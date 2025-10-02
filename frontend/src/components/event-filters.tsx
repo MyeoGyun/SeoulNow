@@ -139,13 +139,13 @@ export function EventFilters({
       <div className="grid gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_auto]">
         <div className="space-y-2">
           <label htmlFor="search" className="text-sm font-medium text-muted-foreground">
-            행사 검색
+            검색
           </label>
           <Input
             id="search"
             name="search"
             value={search}
-            placeholder="행사명으로 검색하세요"
+            placeholder="행사 및 지역으로 검색하세요"
             autoComplete="off"
             onFocus={handleInputFocus}
             onBlur={handleInputBlur}

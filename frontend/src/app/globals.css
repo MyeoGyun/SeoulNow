@@ -31,6 +31,11 @@ body {
   overflow-x: hidden;
 }
 
+* {
+  font-family: 'Pretendard Variable', 'Pretendard', -apple-system, BlinkMacSystemFont,
+    'Segoe UI', system-ui, sans-serif;
+}
+
 body {
   @apply bg-background text-foreground antialiased;
   font-family: 'Pretendard Variable', 'Pretendard', -apple-system, BlinkMacSystemFont,
@@ -38,11 +43,23 @@ body {
 }
 
 .app-shell {
-  @apply flex min-h-screen flex-col bg-background;
+  @apply flex min-h-screen flex-col bg-white;
 }
 
 .site-header {
-  @apply mx-auto w-full max-w-6xl px-6 py-6;
+  @apply w-full border-b border-border/50 bg-white/90 backdrop-blur-sm shadow-sm;
+}
+
+.site-header-top {
+  @apply mx-auto flex max-w-6xl items-center justify-between px-6 py-4;
+}
+
+.site-header-nav {
+  @apply border-t border-border/30 bg-white/95;
+}
+
+.site-header-nav-inner {
+  @apply mx-auto flex max-w-6xl justify-center px-6 py-3;
 }
 
 .site-logo {
@@ -50,7 +67,7 @@ body {
 }
 
 .site-main {
-  @apply flex-1 w-full;
+  @apply flex-1 w-full bg-white;
 }
 
 .district-label {

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { SiteLogo } from "@/components/site-logo";
+import { TopNavigator } from "@/components/top-navigator";
 
 export const metadata: Metadata = {
   title: "Seoul Now",
@@ -20,7 +21,14 @@ export default function RootLayout({
       <body>
         <div className="app-shell">
           <header className="site-header">
-            <SiteLogo />
+            <div className="site-header-top">
+              <SiteLogo />
+            </div>
+            <div className="site-header-nav">
+              <div className="site-header-nav-inner">
+                <TopNavigator />
+              </div>
+            </div>
           </header>
           <main className="site-main">{children}</main>
         </div>

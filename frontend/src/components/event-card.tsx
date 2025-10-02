@@ -42,7 +42,7 @@ export function EventCard({ event, weather, dateRange }: EventCardProps) {
             이미지 준비 중
           </div>
         )}
-        <div className="flex flex-1 flex-col gap-4 p-6">
+        <div className="flex flex-1 flex-col gap-4 p-4">
           <div className="flex items-start justify-between gap-3">
             <div className="flex flex-wrap items-center gap-2">
               {event.codename && (
@@ -88,7 +88,7 @@ export function EventCard({ event, weather, dateRange }: EventCardProps) {
             )}
           </div>
           {hasWeatherData && (
-            <div className="mt-auto rounded-2xl border border-border/80 bg-card px-4 py-4">
+            <div className="mt-auto rounded-2xl border border-border/80 bg-card px-3 py-3">
               <p className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">날씨 브리핑</p>
               <WeatherSummary weather={weather} />
             </div>
