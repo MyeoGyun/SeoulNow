@@ -53,7 +53,7 @@ async def list_events(
     search: str | None = Query(default=None, description="행사명 텍스트 검색"),
     start_after: date | None = Query(default=None, description="이 날짜 이후 시작하는 행사"),
     end_before: date | None = Query(default=None, description="이 날짜 이전 종료하는 행사"),
-    limit: int = Query(default=20, ge=1, le=100),
+    limit: int | None = Query(default=None),
     offset: int = Query(default=0, ge=0),
 ) -> EventListResponse:
     """List events with optional filtering and pagination."""
@@ -75,11 +75,10 @@ async def list_events(
     total_result = await session.execute(count_statement)
     total = total_result.scalar_one()
 
-    paginated_statement = (
-        filtered_statement.order_by(Event.start_date.asc().nulls_last(), Event.id.asc())
-        .offset(offset)
-        .limit(limit)
-    )
+    paginated_statement = filtered_statement.order_by(Event.start_date.asc().nulls_last(), Event.id.asc()).offset(offset)
+    
+    if limit is not None:
+        paginated_statement = paginated_statement.limit(limit)
     result = await session.execute(paginated_statement)
     events = result.scalars().all()
 

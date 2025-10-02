@@ -154,7 +154,7 @@ export function EventFilters({
 
   return (
     <div className="space-y-4 rounded-2xl border border-border/60 bg-card/60 p-4 backdrop-blur">
-      <div className="grid gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_auto]">
+      <div className="grid gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto]">
         <div className="space-y-2">
           <label htmlFor="search" className="text-sm font-medium text-muted-foreground">
             검색
@@ -203,6 +203,25 @@ export function EventFilters({
           >
             <option value="">전체</option>
             {feeOptions.map((item) => (
+              <option key={item} value={item}>
+                {item}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="space-y-2">
+          <label htmlFor="codename" className="text-sm font-medium text-muted-foreground">
+            카테고리
+          </label>
+          <select
+            id="codename"
+            name="codename"
+            value={category}
+            onChange={(event) => handleCategoryChange(event.target.value)}
+            className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <option value="">전체 카테고리</option>
+            {categories.map((item) => (
               <option key={item} value={item}>
                 {item}
               </option>

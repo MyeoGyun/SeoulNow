@@ -81,9 +81,17 @@ export default async function Home({
   let offset = (page - 1) * PAGE_SIZE;
   let useUpcomingFilter = true;
 
-  let summaryEventsResponse = await fetchEvents({ limit: 1, start_after: today });
+  // 캐러셀용: 더 넓은 범위로 행사 가져오기
+  const endDate = new Date();
+  endDate.setDate(endDate.getDate() + 13);
+  const endDateString = endDate.toISOString().split('T')[0];
+  
+  let summaryEventsResponse = await fetchEvents({ 
+    start_after: today,
+    end_before: endDateString
+  });
   if (summaryEventsResponse.items.length === 0) {
-    summaryEventsResponse = await fetchEvents({ limit: 1 });
+    summaryEventsResponse = await fetchEvents({});
   }
 
   let summaryLocations = await fetchEventLocations({ limit: 2000, start_after: today });
@@ -374,7 +382,7 @@ export default async function Home({
           </div>
         </div>
         
-        <EventCarousel events={events} />
+        <EventCarousel events={summaryEventsResponse.items} />
         
         <div className="flex items-center gap-3 mt-8 mb-6">
           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-r from-primary to-primary/70">
