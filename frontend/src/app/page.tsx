@@ -3,6 +3,7 @@ import Link from "next/link";
 import { EventFilters } from "@/components/event-filters";
 import { InfoTabs } from "@/components/info-tabs";
 import { EventCard } from "@/components/event-card";
+import { EventCarousel } from "@/components/event-carousel";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -106,11 +107,20 @@ export default async function Home({
     ),
   ).sort((a, b) => a.localeCompare(b, "ko"));
 
+  const availableCategories = Array.from(
+    new Set(
+      summaryLocations
+        .map((event) => event.codename)
+        .filter((value): value is string => typeof value === "string" && value.trim().length > 0),
+    ),
+  ).sort((a, b) => a.localeCompare(b, "ko"));
+
   const summaryTotal = summaryEventsResponse.total;
 
   const searchValue = getParam("search");
   const selectedDistrict = getParam("guname");
   const selectedFee = getParam("is_free");
+  const selectedCategory = getParam("codename");
 
   const baseFilters: EventQueryParams = {};
   if (searchValue) {
@@ -121,6 +131,9 @@ export default async function Home({
   }
   if (selectedFee) {
     baseFilters.is_free = selectedFee;
+  }
+  if (selectedCategory) {
+    baseFilters.codename = selectedCategory;
   }
 
   let eventsResponse = await fetchEvents({
@@ -179,16 +192,45 @@ export default async function Home({
   const districtCount = availableDistricts.length;
   const popularDistricts = availableDistricts.slice(0, 6);
 
+  // 이번 주 행사 계산
+  const getThisWeekEvents = () => {
+    const today = new Date();
+    const startOfWeek = new Date(today);
+    startOfWeek.setDate(today.getDate() - today.getDay()); // 일요일
+    startOfWeek.setHours(0, 0, 0, 0);
+    
+    const endOfWeek = new Date(startOfWeek);
+    endOfWeek.setDate(startOfWeek.getDate() + 6); // 토요일
+    endOfWeek.setHours(23, 59, 59, 999);
+    
+    return events.filter(event => {
+      if (!event.start_date) return false;
+      
+      const eventDate = new Date(event.start_date);
+      return eventDate >= startOfWeek && eventDate <= endOfWeek;
+    });
+  };
+
+  const thisWeekEvents = getThisWeekEvents();
+  const thisWeekTotal = thisWeekEvents.length;
+  const thisWeekDistricts = Array.from(
+    new Set(
+      thisWeekEvents
+        .map((event) => event.guname)
+        .filter((value): value is string => typeof value === "string" && value.trim().length > 0),
+    ),
+  ).length;
+
   const enriched = await Promise.all(
     events.map(async (event) => {
       const result = await fetchEventWithWeather(event.id, event.guname ?? undefined);
       return { event, weather: result?.weather ?? null };
     })
   );
-  const hasActiveFilters = Boolean(searchValue || selectedDistrict || selectedFee);
+  const hasActiveFilters = Boolean(searchValue || selectedDistrict || selectedFee || selectedCategory);
   const preservedFilterParams = Object.entries(resolvedSearchParams ?? {}).reduce(
     (acc, [key, value]) => {
-      if (["search", "guname", "is_free", "page"].includes(key)) {
+      if (["search", "guname", "is_free", "codename", "page"].includes(key)) {
         return acc;
       }
       const values: string[] = Array.isArray(value)
@@ -308,21 +350,54 @@ export default async function Home({
   const exploreTabContent = (
     <>
       <section className="space-y-6">
-        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-          <h2 className="text-2xl font-semibold text-foreground">다가오는 행사</h2>
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-r from-primary to-primary/70">
+              <svg className="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+            </div>
+            <div>
+              <h2 className="text-2xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
+                다가오는 행사
+              </h2>
+              <p className="text-sm text-muted-foreground">이번주에 진행되는 문화 행사를 확인하세요</p>
+            </div>
+          </div>
           <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-            <span className="rounded-full bg-secondary px-3 py-1">
-              {filteredTotal.toLocaleString()}개의 최신 데이터
+            <span className="rounded-full bg-primary/10 border border-primary/20 px-3 py-1 text-primary font-medium">
+              {thisWeekTotal.toLocaleString()}개 행사
             </span>
-            <span className="rounded-full bg-secondary px-3 py-1">{districtCount}개 자치구</span>
+            <span className="rounded-full bg-primary/10 border border-primary/20 px-3 py-1 text-primary font-medium">
+              {thisWeekDistricts}개 자치구
+            </span>
           </div>
         </div>
+        
+        <EventCarousel events={events} />
+        
+        <div className="flex items-center gap-3 mt-8 mb-6">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-r from-primary to-primary/70">
+            <svg className="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+            </svg>
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
+              서울의 전체 행사
+            </h2>
+            <p className="text-sm text-muted-foreground">검색과 필터로 원하는 문화 행사를 찾아보세요</p>
+          </div>
+        </div>
+        
         <EventFilters
           initialSearch={searchValue}
           initialDistrict={selectedDistrict}
           initialFee={selectedFee}
+          initialCategory={selectedCategory}
           districts={availableDistricts}
           feeOptions={availableFeeOptions}
+          categories={availableCategories}
           preservedParams={preservedFilterParams}
         />
         {enriched.length === 0 ? (
