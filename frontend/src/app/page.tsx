@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Suspense } from "react";
 
 import { EventFilters } from "@/components/event-filters";
 import { InfoTabs } from "@/components/info-tabs";
@@ -398,16 +399,18 @@ export default async function Home({
           </div>
         </div>
         
-        <EventFilters
-          initialSearch={searchValue}
-          initialDistrict={selectedDistrict}
-          initialFee={selectedFee}
-          initialCategory={selectedCategory}
-          districts={availableDistricts}
-          feeOptions={availableFeeOptions}
-          categories={availableCategories}
-          preservedParams={preservedFilterParams}
-        />
+        <Suspense fallback={<div className="h-20 bg-muted/20 rounded-2xl animate-pulse" />}>
+          <EventFilters
+            initialSearch={searchValue}
+            initialDistrict={selectedDistrict}
+            initialFee={selectedFee}
+            initialCategory={selectedCategory}
+            districts={availableDistricts}
+            feeOptions={availableFeeOptions}
+            categories={availableCategories}
+            preservedParams={preservedFilterParams}
+          />
+        </Suspense>
         {enriched.length === 0 ? (
           <Card className="border-dashed">
             <CardContent className="py-12 text-center text-muted-foreground">
