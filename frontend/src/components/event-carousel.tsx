@@ -29,26 +29,24 @@ export function EventCarousel({ events }: EventCarouselProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isHovered, setIsHovered] = useState(false);
   
-  // 이번 주 행사 필터링
-  const getThisWeekEvents = () => {
+  // 오늘부터 +13일(총 14일) 행사 필터링
+  const getUpcomingEvents = () => {
     const today = new Date();
-    const startOfWeek = new Date(today);
-    startOfWeek.setDate(today.getDate() - today.getDay()); // 일요일
-    startOfWeek.setHours(0, 0, 0, 0);
+    today.setHours(0, 0, 0, 0);
     
-    const endOfWeek = new Date(startOfWeek);
-    endOfWeek.setDate(startOfWeek.getDate() + 6); // 토요일
-    endOfWeek.setHours(23, 59, 59, 999);
+    const endDate = new Date(today);
+    endDate.setDate(today.getDate() + 13); // 당일 포함하여 +13일
+    endDate.setHours(23, 59, 59, 999);
     
     return events.filter(event => {
       if (!event.start_date) return false;
       
       const eventDate = new Date(event.start_date);
-      return eventDate >= startOfWeek && eventDate <= endOfWeek;
-    }); // 이번 주 모든 행사 표시
+      return eventDate >= today && eventDate <= endDate;
+    });
   };
   
-  const upcomingEvents = getThisWeekEvents();
+  const upcomingEvents = getUpcomingEvents();
 
   // 특정 인덱스로 스크롤하는 함수
   const scrollToIndex = (index: number) => {
