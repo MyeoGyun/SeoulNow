@@ -12,8 +12,10 @@ type EventFiltersProps = {
   initialSearch?: string;
   initialDistrict?: string;
   initialFee?: string;
+  initialCategory?: string;
   districts: string[];
   feeOptions: string[];
+  categories: string[];
   preservedParams: Record<string, string[]>;
 };
 
@@ -21,8 +23,10 @@ export function EventFilters({
   initialSearch,
   initialDistrict,
   initialFee,
+  initialCategory,
   districts,
   feeOptions,
+  categories,
   preservedParams,
 }: EventFiltersProps) {
   const router = useRouter();
@@ -31,6 +35,7 @@ export function EventFilters({
   const [search, setSearch] = useState(initialSearch ?? "");
   const [district, setDistrict] = useState(initialDistrict ?? "");
   const [fee, setFee] = useState(initialFee ?? "");
+  const [category, setCategory] = useState(initialCategory ?? "");
   const [, startTransition] = useTransition();
   const [isMounted, setIsMounted] = useState(false);
   const blurTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -48,10 +53,14 @@ export function EventFilters({
   }, [initialFee]);
 
   useEffect(() => {
+    setCategory(initialCategory ?? "");
+  }, [initialCategory]);
+
+  useEffect(() => {
     setIsMounted(true);
   }, []);
 
-  const applyFilters = (nextSearch = search, nextDistrict = district, nextFee = fee) => {
+  const applyFilters = (nextSearch = search, nextDistrict = district, nextFee = fee, nextCategory = category) => {
     if (!isMounted) {
       return;
     }
@@ -77,6 +86,10 @@ export function EventFilters({
       params.set("is_free", nextFee);
     }
 
+    if (nextCategory) {
+      params.set("codename", nextCategory);
+    }
+
     const queryString = params.toString();
 
     if (queryString === searchParams.toString()) {
@@ -98,18 +111,23 @@ export function EventFilters({
 
   const handleDistrictChange = (value: string) => {
     setDistrict(value);
-    applyFilters(search, value, fee);
+    applyFilters(search, value, fee, category);
   };
 
   const handleFeeChange = (value: string) => {
     setFee(value);
-    applyFilters(search, district, value);
+    applyFilters(search, district, value, category);
+  };
+
+  const handleCategoryChange = (value: string) => {
+    setCategory(value);
+    applyFilters(search, district, fee, value);
   };
 
   const handleSearchKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Enter") {
       event.preventDefault();
-      applyFilters(search.trim(), district, fee);
+      applyFilters(search.trim(), district, fee, category);
     }
   };
 
@@ -139,13 +157,13 @@ export function EventFilters({
       <div className="grid gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_auto]">
         <div className="space-y-2">
           <label htmlFor="search" className="text-sm font-medium text-muted-foreground">
-            행사 검색
+            검색
           </label>
           <Input
             id="search"
             name="search"
             value={search}
-            placeholder="행사명으로 검색하세요"
+            placeholder="행사 및 지역으로 검색하세요"
             autoComplete="off"
             onFocus={handleInputFocus}
             onBlur={handleInputBlur}

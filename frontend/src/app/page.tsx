@@ -1,11 +1,9 @@
-import Image from "next/image";
 import Link from "next/link";
-import { ArrowUpRight, CalendarDays, MapPin, Ticket } from "lucide-react";
 
-import { EventMapClient } from "@/components/event-map.client";
 import { EventFilters } from "@/components/event-filters";
 import { InfoTabs } from "@/components/info-tabs";
-import { Badge } from "@/components/ui/badge";
+import { EventCard } from "@/components/event-card";
+import { EventCarousel } from "@/components/event-carousel";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -14,7 +12,6 @@ import {
   fetchEvents,
   type EventQueryParams,
   type Event,
-  type Weather,
 } from "@/lib/api-client";
 
 export const revalidate = 300; // Revalidate data every 5 minutes while keeping ISR benefits
@@ -48,44 +45,7 @@ function formatDateRange(event: Event) {
   return `${formatter.format(end!)} 까지`;
 }
 
-function WeatherSummary({ weather }: { weather: Weather | null }) {
-  if (!weather) {
-    return null;
-  }
 
-  const tempText =
-    weather.temp !== null && weather.temp !== undefined ? `${weather.temp.toFixed(1)}℃` : "데이터 없음";
-  const rainText =
-    weather.rain_prob !== null && weather.rain_prob !== undefined ? `${weather.rain_prob}%` : "데이터 없음";
-  const pm10Text =
-    weather.pm10 !== null && weather.pm10 !== undefined ? `${weather.pm10}` : "데이터 없음";
-
-  const hasAnyMetric = [tempText, rainText, pm10Text].some((value) => value !== "데이터 없음");
-
-  if (!hasAnyMetric) {
-    return null;
-  }
-
-  const metrics = [
-    { label: "기온", value: tempText },
-    { label: "강수 확률", value: rainText },
-    { label: "미세먼지", value: pm10Text },
-  ];
-
-  return (
-    <div className="grid gap-3 sm:grid-cols-3">
-      {metrics.map((metric) => (
-        <div
-          key={metric.label}
-          className="rounded-xl border border-border/60 bg-background/70 px-3 py-3 text-center shadow-sm"
-        >
-          <span className="block text-sm font-semibold text-primary">{metric.value}</span>
-          <span className="text-xs text-muted-foreground">{metric.label}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
 
 export default async function Home({
   searchParams,
@@ -147,11 +107,20 @@ export default async function Home({
     ),
   ).sort((a, b) => a.localeCompare(b, "ko"));
 
+  const availableCategories = Array.from(
+    new Set(
+      summaryLocations
+        .map((event) => event.codename)
+        .filter((value): value is string => typeof value === "string" && value.trim().length > 0),
+    ),
+  ).sort((a, b) => a.localeCompare(b, "ko"));
+
   const summaryTotal = summaryEventsResponse.total;
 
   const searchValue = getParam("search");
   const selectedDistrict = getParam("guname");
   const selectedFee = getParam("is_free");
+  const selectedCategory = getParam("codename");
 
   const baseFilters: EventQueryParams = {};
   if (searchValue) {
@@ -162,6 +131,9 @@ export default async function Home({
   }
   if (selectedFee) {
     baseFilters.is_free = selectedFee;
+  }
+  if (selectedCategory) {
+    baseFilters.codename = selectedCategory;
   }
 
   let eventsResponse = await fetchEvents({
@@ -220,16 +192,45 @@ export default async function Home({
   const districtCount = availableDistricts.length;
   const popularDistricts = availableDistricts.slice(0, 6);
 
+  // 이번 주 행사 계산
+  const getThisWeekEvents = () => {
+    const today = new Date();
+    const startOfWeek = new Date(today);
+    startOfWeek.setDate(today.getDate() - today.getDay()); // 일요일
+    startOfWeek.setHours(0, 0, 0, 0);
+    
+    const endOfWeek = new Date(startOfWeek);
+    endOfWeek.setDate(startOfWeek.getDate() + 6); // 토요일
+    endOfWeek.setHours(23, 59, 59, 999);
+    
+    return events.filter(event => {
+      if (!event.start_date) return false;
+      
+      const eventDate = new Date(event.start_date);
+      return eventDate >= startOfWeek && eventDate <= endOfWeek;
+    });
+  };
+
+  const thisWeekEvents = getThisWeekEvents();
+  const thisWeekTotal = thisWeekEvents.length;
+  const thisWeekDistricts = Array.from(
+    new Set(
+      thisWeekEvents
+        .map((event) => event.guname)
+        .filter((value): value is string => typeof value === "string" && value.trim().length > 0),
+    ),
+  ).length;
+
   const enriched = await Promise.all(
     events.map(async (event) => {
       const result = await fetchEventWithWeather(event.id, event.guname ?? undefined);
       return { event, weather: result?.weather ?? null };
     })
   );
-  const hasActiveFilters = Boolean(searchValue || selectedDistrict || selectedFee);
+  const hasActiveFilters = Boolean(searchValue || selectedDistrict || selectedFee || selectedCategory);
   const preservedFilterParams = Object.entries(resolvedSearchParams ?? {}).reduce(
     (acc, [key, value]) => {
-      if (["search", "guname", "is_free", "page"].includes(key)) {
+      if (["search", "guname", "is_free", "codename", "page"].includes(key)) {
         return acc;
       }
       const values: string[] = Array.isArray(value)
@@ -329,109 +330,74 @@ export default async function Home({
     },
   ];
 
-  return (
-    <div className="space-y-16 pb-16">
-      <section className="relative mx-auto mt-10 w-full max-w-6xl overflow-hidden rounded-3xl border border-border bg-gradient-to-br from-primary/10 via-background to-background p-6 sm:p-8 md:p-12">
-        <div className="flex flex-col gap-10">
-          <div className="space-y-6">
-            <div className="space-y-4 text-center md:text-left">
-              <h1 className="text-3xl font-semibold leading-tight text-foreground sm:text-4xl md:text-5xl">
-                서울에서 즐길 수 있는 모든 순간을 한눈에
-              </h1>
-              <p className="mx-auto max-w-xl text-base text-muted-foreground md:mx-0 md:text-lg">
-                전시, 공연, 축제 정보를 한곳에서 확인하고, 실시간 추천과 지도 탐색으로 일정 계획을 더 빠르게 세워보세요.
-              </p>
-            </div>
-            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:justify-center md:justify-start">
-              <Button size="lg" asChild className="w-full sm:w-auto">
-                <a href="#map" className="inline-flex items-center justify-center">
-                  지도로 둘러보기
-                  <ArrowUpRight className="ml-2 h-4 w-4" />
-                </a>
-              </Button>
-              <Button size="lg" variant="ghost" asChild className="w-full sm:w-auto">
-                <a
-                  href="https://data.seoul.go.kr/"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center justify-center"
-                >
-                  서울 열린데이터 살펴보기
-                  <ArrowUpRight className="ml-2 h-4 w-4" />
-                </a>
-              </Button>
-            </div>
-          </div>
-          <div className="flex flex-col gap-8 md:grid md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] md:items-start">
-            <div className="space-y-4">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="rounded-2xl border border-border/70 bg-card/80 p-5 shadow-sm">
-                  <p className="text-sm text-muted-foreground">총 행사</p>
-                  <p className="mt-2 text-3xl font-semibold text-foreground">
-                    {summaryTotal.toLocaleString()}건
-                  </p>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    서울 열린데이터 광장 기준, {useUpcomingFilter ? "오늘 이후" : "전체"} 일정 기준입니다.
-                  </p>
-                </div>
-                <div className="rounded-2xl border border-border/70 bg-card/80 p-5 shadow-sm">
-                  <p className="text-sm text-muted-foreground">참여 자치구</p>
-                  <p className="mt-2 text-3xl font-semibold text-foreground">{districtCount}곳</p>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    지도와 필터에서 확인할 수 있는 자치구 정보를 요약했어요.
-                  </p>
-                </div>
-              </div>
-            </div>
-            <InfoTabs tabs={statsTabs} className="w-full" />
-          </div>
-        </div>
-      </section>
+  const summaryHighlights = (
+    <div className="grid gap-4 sm:grid-cols-2">
+      <div className="rounded-2xl border border-border/70 bg-card/80 p-5 shadow-sm">
+        <p className="text-sm text-muted-foreground">총 행사</p>
+        <p className="mt-2 text-3xl font-semibold text-foreground">{summaryTotal.toLocaleString()}건</p>
+        <p className="mt-2 text-xs text-muted-foreground">
+          서울 열린데이터 광장 기준, {useUpcomingFilter ? "오늘 이후" : "전체"} 일정 기준입니다.
+        </p>
+      </div>
+      <div className="rounded-2xl border border-border/70 bg-card/80 p-5 shadow-sm">
+        <p className="text-sm text-muted-foreground">참여 자치구</p>
+        <p className="mt-2 text-3xl font-semibold text-foreground">{districtCount}곳</p>
+        <p className="mt-2 text-xs text-muted-foreground">지도와 필터에서 확인할 수 있는 자치구 정보를 요약했어요.</p>
+      </div>
+    </div>
+  );
 
-      <section id="map" className="container max-w-6xl space-y-6 px-6">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h2 className="text-2xl font-semibold text-foreground">서울 문화 지도</h2>
-            <p className="text-sm text-muted-foreground">
-              행사 위치를 지도로 탐색하고, 관심 있는 지역을 확대해 세부 정보를 살펴보세요.
-            </p>
+  const exploreTabContent = (
+    <>
+      <section className="space-y-6">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-r from-primary to-primary/70">
+              <svg className="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+            </div>
+            <div>
+              <h2 className="text-2xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
+                다가오는 행사
+              </h2>
+              <p className="text-sm text-muted-foreground">이번주에 진행되는 문화 행사를 확인하세요</p>
+            </div>
           </div>
-          <Button variant="outline" size="sm" asChild>
-            <a href="https://culture.seoul.go.kr/" target="_blank" rel="noreferrer">
-              서울문화포털 바로가기
-              <ArrowUpRight className="ml-2 h-4 w-4" />
-            </a>
-          </Button>
-        </div>
-        <Card className="overflow-hidden border-border bg-card/70 backdrop-blur">
-          <CardContent className="p-0">
-            <EventMapClient
-              events={locations}
-              preservedParams={preservedFilterParams}
-              searchValue={searchValue ?? null}
-              selectedFee={selectedFee ?? null}
-              selectedDistrict={selectedDistrict ?? null}
-            />
-          </CardContent>
-        </Card>
-      </section>
-
-      <section className="container max-w-6xl space-y-6 px-6">
-        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-          <h2 className="text-2xl font-semibold text-foreground">오늘의 추천</h2>
           <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-            <span className="rounded-full bg-secondary px-3 py-1">
-              {filteredTotal.toLocaleString()}개의 최신 데이터
+            <span className="rounded-full bg-primary/10 border border-primary/20 px-3 py-1 text-primary font-medium">
+              {thisWeekTotal.toLocaleString()}개 행사
             </span>
-            <span className="rounded-full bg-secondary px-3 py-1">{districtCount}개 자치구</span>
+            <span className="rounded-full bg-primary/10 border border-primary/20 px-3 py-1 text-primary font-medium">
+              {thisWeekDistricts}개 자치구
+            </span>
           </div>
         </div>
+        
+        <EventCarousel events={events} />
+        
+        <div className="flex items-center gap-3 mt-8 mb-6">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-r from-primary to-primary/70">
+            <svg className="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+            </svg>
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
+              서울의 전체 행사
+            </h2>
+            <p className="text-sm text-muted-foreground">검색과 필터로 원하는 문화 행사를 찾아보세요</p>
+          </div>
+        </div>
+        
         <EventFilters
           initialSearch={searchValue}
           initialDistrict={selectedDistrict}
           initialFee={selectedFee}
+          initialCategory={selectedCategory}
           districts={availableDistricts}
           feeOptions={availableFeeOptions}
+          categories={availableCategories}
           preservedParams={preservedFilterParams}
         />
         {enriched.length === 0 ? (
@@ -445,104 +411,9 @@ export default async function Home({
         ) : (
           <>
             <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
-              {enriched.map(({ event, weather }) => {
-                const eventUrl = event.hmpg_addr ?? event.org_link ?? "#";
-                const isExternal = eventUrl.startsWith("http");
-                const feeInfo = (event.use_fee ?? "").trim() || (event.ticket ?? "").trim();
-
-                const hasWeatherData =
-                  weather !== null &&
-                  [weather.temp, weather.rain_prob, weather.pm10].some(
-                    (value) => value !== null && value !== undefined,
-                  );
-
-                return (
-                  <Card
-                    key={event.id}
-                    className="group flex h-full flex-col overflow-hidden border-border bg-card/80 shadow-sm transition duration-200 hover:-translate-y-1 hover:border-primary/40 hover:shadow-xl"
-                  >
-                    <a
-                      href={eventUrl}
-                      target={isExternal ? "_blank" : undefined}
-                      rel={isExternal ? "noreferrer" : undefined}
-                      className="flex h-full flex-col"
-                    >
-                      {event.main_img ? (
-                        <div className="relative aspect-[4/3] w-full overflow-hidden bg-muted/10">
-                          <Image
-                            src={event.main_img}
-                            alt={event.title}
-                            fill
-                            sizes="(max-width: 48rem) 100vw, 25rem"
-                            loading="lazy"
-                            className="object-contain p-4 transition duration-500 group-hover:scale-[1.02]"
-                          />
-                        </div>
-                      ) : (
-                        <div className="flex aspect-[4/3] w-full items-center justify-center bg-muted/10 text-xs text-muted-foreground">
-                          이미지 준비 중
-                        </div>
-                      )}
-                      <div className="flex flex-1 flex-col gap-4 p-6">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex flex-wrap items-center gap-2">
-                            {event.codename && (
-                              <Badge variant="secondary" className="bg-primary/10 text-primary">
-                                {event.codename}
-                              </Badge>
-                            )}
-                            {event.is_free && (
-                              <Badge variant="outline" className="border-primary/30 text-primary">
-                                {event.is_free}
-                              </Badge>
-                            )}
-                          </div>
-                          {event.guname && (
-                            <Badge variant="outline" className="border-primary/40 bg-primary/10 text-primary">
-                              {event.guname}
-                            </Badge>
-                          )}
-                        </div>
-                        <h3 className="line-clamp-2 text-lg font-semibold leading-snug text-foreground transition-colors group-hover:text-primary">
-                          {event.title}
-                        </h3>
-                        <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                          <span className="inline-flex max-w-full items-center gap-1 rounded-lg border border-border/60 bg-background/80 px-2 py-1">
-                            <CalendarDays className="h-4 w-4 min-w-[1rem] text-primary" />
-                            <span className="line-clamp-1 max-w-[12rem] sm:max-w-[9rem] lg:max-w-[10rem] xl:max-w-[12rem]">
-                              {formatDateRange(event)}
-                            </span>
-                          </span>
-                          {event.place && (
-                            <span className="inline-flex max-w-full items-center gap-1 rounded-lg border border-border/60 bg-background/80 px-2 py-1">
-                              <MapPin className="h-4 w-4 min-w-[1rem] text-primary" />
-                              <span className="line-clamp-1 max-w-[12rem] sm:max-w-[9rem] lg:max-w-[10rem] xl:max-w-[12rem]">
-                                {event.place}
-                              </span>
-                            </span>
-                          )}
-                          {feeInfo && (
-                            <span className="inline-flex max-w-full items-center gap-1 rounded-lg border border-border/60 bg-background/80 px-2 py-1">
-                              <Ticket className="h-4 w-4 min-w-[1rem] text-primary" />
-                              <span className="line-clamp-1 max-w-[12rem] sm:max-w-[9rem] lg:max-w-[10rem] xl:max-w-[12rem]">
-                                {feeInfo}
-                              </span>
-                            </span>
-                          )}
-                        </div>
-                        {hasWeatherData && (
-                          <div className="mt-auto rounded-2xl border border-border/80 bg-card px-4 py-4">
-                            <p className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                              날씨 브리핑
-                            </p>
-                            <WeatherSummary weather={weather} />
-                          </div>
-                        )}
-                      </div>
-                    </a>
-                  </Card>
-                );
-              })}
+              {enriched.map(({ event, weather }) => (
+                <EventCard key={event.id} event={event} weather={weather} dateRange={formatDateRange(event)} />
+              ))}
             </div>
             {(hasPrev || hasNext) && (
               <nav className="flex items-center justify-between pt-6" aria-label="이벤트 페이지 네비게이션">
@@ -572,6 +443,52 @@ export default async function Home({
           </>
         )}
       </section>
+    </>
+  );
+
+  const statsTabContent = (
+    <section className="space-y-6">
+      {summaryHighlights}
+      <InfoTabs tabs={statsTabs} />
+    </section>
+  );
+
+
+
+  return (
+    <div className="pt-8 pb-16">
+      {(() => {
+        const viewParam = resolvedSearchParams?.view;
+        if (viewParam === "stats") {
+          return (
+            <div className="container max-w-6xl space-y-8 px-6">
+              {statsTabContent}
+            </div>
+          );
+        }
+        if (viewParam === "calendar") {
+          return (
+            <div className="container max-w-6xl space-y-8 px-6">
+              <section className="space-y-6">
+                <div className="text-center">
+                  <h2 className="text-2xl font-semibold text-foreground">일정 캘린더</h2>
+                  <p className="text-sm text-muted-foreground mt-2">캘린더 뷰는 곧 업데이트될 예정입니다.</p>
+                </div>
+                <Card className="border-dashed">
+                  <CardContent className="py-12 text-center text-muted-foreground">
+                    캘린더 기능을 준비 중입니다.
+                  </CardContent>
+                </Card>
+              </section>
+            </div>
+          );
+        }
+        return (
+          <div className="container max-w-6xl space-y-8 px-6">
+            {exploreTabContent}
+          </div>
+        );
+      })()}
     </div>
   );
 }
