@@ -135,7 +135,12 @@ export function EventCarousel({ events }: EventCarouselProps) {
   }, [upcomingEvents.length, isHovered]);
 
   if (upcomingEvents.length === 0) {
-    return null;
+    return (
+      <div className="rounded-2xl border border-border/60 bg-card/60 p-8 text-center">
+        <p className="text-muted-foreground">곧 진행될 행사가 없거나 데이터를 불러올 수 없습니다.</p>
+        <p className="text-xs text-muted-foreground mt-2">잠시 후 다시 시도해보세요.</p>
+      </div>
+    );
   }
 
   return (

@@ -1,4 +1,16 @@
 services:
+    # nginx:
+    # image: nginx:alpine
+    # container_name: nginx
+    # volumes:
+    #   - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    # ports:
+    #   - "80:80"
+    #   - "443:443"
+    # depends_on:
+    #   - frontend
+    #   - backend
+  
   postgres:
     image: postgres:16-alpine
     environment:
@@ -34,7 +46,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     environment:
-      NEXT_PUBLIC_API_BASE_URL: http://backend:8000/api
+      NEXT_PUBLIC_API_BASE_URL: http://13.50.132.59:8000/api
     depends_on:
       - backend
     ports:
