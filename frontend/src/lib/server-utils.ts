@@ -5,6 +5,7 @@ import {
   fetchEventWithWeather,
   fetchEvents,
   type EventQueryParams,
+  type Event,
 } from "@/lib/api-client";
 import { calculateStatistics } from "@/lib/utils";
 
@@ -175,6 +176,31 @@ export async function fetchEventData(
     summaryLocations = await fetchEventLocations({ limit: 2000 });
   }
 
+  const fetchAllEventsForAnalytics = async (): Promise<Event[]> => {
+    const batchSize = 800;
+    let offset = 0;
+    let total = Number.POSITIVE_INFINITY;
+    const results: Event[] = [];
+
+    while (offset < total) {
+      const response = await fetchEvents({ limit: batchSize, offset });
+      if (response.items.length === 0) {
+        break;
+      }
+      results.push(...response.items);
+      total = response.total;
+      offset += response.items.length;
+
+      if (response.items.length < batchSize) {
+        break;
+      }
+    }
+
+    return results;
+  };
+
+  const analyticsEvents = await fetchAllEventsForAnalytics();
+
   // 사용 가능한 옵션들 계산
   const availableDistricts = Array.from(
     new Set(
@@ -230,6 +256,169 @@ export async function fetchEventData(
     }
     return eventUtc >= todayUtc && eventUtc <= endUtc;
   });
+
+  const normalizeText = (value: string | null | undefined) => (value ? value.trim().toLowerCase() : "");
+  const isEventFree = (event: Event): boolean => {
+    const freeFlag = normalizeText(event.is_free);
+    if (freeFlag.includes("무료") || freeFlag.includes("free") || freeFlag === "y") {
+      return true;
+    }
+
+    const useFee = normalizeText(event.use_fee);
+    if (useFee.includes("무료") || useFee.includes("free") || useFee.includes("0원")) {
+      return true;
+    }
+
+    return false;
+  };
+
+  const extractPrice = (raw: string | null | undefined): number | null => {
+    if (!raw) {
+      return null;
+    }
+    const cleaned = raw.replace(/[,\s]/g, "");
+    const match = cleaned.match(/(\d+(?:\.\d+)?)/);
+    if (!match) {
+      return null;
+    }
+    const value = Number.parseFloat(match[1]);
+    if (Number.isNaN(value)) {
+      return null;
+    }
+    return value;
+  };
+
+  const average = (values: number[]): number | null => {
+    if (values.length === 0) {
+      return null;
+    }
+    const total = values.reduce((sum, value) => sum + value, 0);
+    return total / values.length;
+  };
+
+  const statusCounts = { upcoming: 0, ongoing: 0, past: 0 };
+  const districtMap = new Map<string, number>();
+  const categoryMap = new Map<string, number>();
+  const timelineMap = new Map<string, number>();
+  const weekdayMap = new Map<number, number>();
+
+  const freeReservationWindows: number[] = [];
+  const paidReservationWindows: number[] = [];
+  const paidPrices: number[] = [];
+
+  const now = new Date();
+  const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+  let freeCount = 0;
+
+  analyticsEvents.forEach((event) => {
+    const start = event.start_date ? new Date(event.start_date) : null;
+    const end = event.end_date ? new Date(event.end_date) : start;
+    const created = event.created_at ? new Date(event.created_at) : null;
+
+    const district = event.guname?.trim();
+    if (district && district.length > 0) {
+      districtMap.set(district, (districtMap.get(district) ?? 0) + 1);
+    }
+
+    const category = event.codename?.trim();
+    if (category && category.length > 0) {
+      categoryMap.set(category, (categoryMap.get(category) ?? 0) + 1);
+    }
+
+    if (start) {
+      const monthKey = `${start.getUTCFullYear()}-${String(start.getUTCMonth() + 1).padStart(2, "0")}`;
+      timelineMap.set(monthKey, (timelineMap.get(monthKey) ?? 0) + 1);
+
+      const weekday = start.getDay();
+      weekdayMap.set(weekday, (weekdayMap.get(weekday) ?? 0) + 1);
+
+      if (start > now) {
+        statusCounts.upcoming += 1;
+      } else if (end && end >= now) {
+        statusCounts.ongoing += 1;
+      } else {
+        statusCounts.past += 1;
+      }
+
+      if (created) {
+        const diff = Math.max(0, start.getTime() - created.getTime());
+        const diffDays = diff / MS_PER_DAY;
+        if (isEventFree(event)) {
+          freeReservationWindows.push(diffDays);
+        } else {
+          paidReservationWindows.push(diffDays);
+        }
+      }
+    }
+
+    if (isEventFree(event)) {
+      freeCount += 1;
+    } else {
+      const price = extractPrice(event.use_fee ?? event.ticket ?? null);
+      if (price !== null && price > 0) {
+        paidPrices.push(price);
+      }
+    }
+  });
+
+  const districtEntries = Array.from(districtMap.entries())
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => b.count - a.count);
+
+  const topDistricts = districtEntries.slice(0, 5);
+  const bottomDistricts = districtEntries.slice(-5).sort((a, b) => a.count - b.count);
+
+  const categoryEntries = Array.from(categoryMap.entries())
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => b.count - a.count);
+
+  const timelineEntries = Array.from(timelineMap.entries())
+    .map(([period, count]) => ({ period, count }))
+    .sort((a, b) => a.period.localeCompare(b.period));
+  const limitedTimeline = timelineEntries.slice(-8);
+
+  const weekdayLabels = ["일", "월", "화", "수", "목", "금", "토"];
+  const weekdayEntries = weekdayLabels.map((label, index) => ({
+    label,
+    count: weekdayMap.get(index) ?? 0,
+  }));
+
+  const totalAnalyticsEvents = analyticsEvents.length;
+  const paidCount = Math.max(totalAnalyticsEvents - freeCount, 0);
+  const freeRatio = totalAnalyticsEvents > 0 ? freeCount / totalAnalyticsEvents : 0;
+
+  const analytics = {
+    summary: {
+      total: totalAnalyticsEvents,
+      upcoming: statusCounts.upcoming,
+      ongoing: statusCounts.ongoing,
+      past: statusCounts.past,
+      freeCount,
+      paidCount,
+      freeRatio,
+    },
+    districts: {
+      distribution: districtEntries,
+      top: topDistricts,
+      bottom: bottomDistricts,
+    },
+    timeline: limitedTimeline,
+    categories: categoryEntries.slice(0, 8),
+    weekdays: weekdayEntries,
+    price: {
+      free: {
+        count: freeCount,
+        averagePrice: 0,
+        averageReservationWindow: average(freeReservationWindows),
+      },
+      paid: {
+        count: paidCount,
+        averagePrice: average(paidPrices),
+        averageReservationWindow: average(paidReservationWindows),
+      },
+    },
+  } as const;
 
   // 필터링된 이벤트 가져오기
   const initialParams: EventQueryParams = {
@@ -295,6 +484,7 @@ export async function fetchEventData(
     locations,
     statistics,
     upcomingEvents,
+    analytics,
     availableDistricts,
     availableFeeOptions,
     availableCategories,

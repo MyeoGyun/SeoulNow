@@ -61,16 +61,7 @@ export default async function Home({
         if (viewParam === "stats") {
           return (
             <div className="container max-w-6xl space-y-8 px-6">
-              <StatsSection
-                summaryTotal={eventData.summaryEventsResponse.total}
-                districtCount={eventData.statistics.districtCount}
-                useUpcomingFilter={eventData.useUpcomingFilter}
-                freeEventsCount={eventData.statistics.freeEventsCount}
-                paidOrUnknownCount={eventData.statistics.paidOrUnknownCount}
-                availableDistricts={eventData.availableDistricts}
-                popularDistricts={eventData.statistics.popularDistricts}
-                locationsCount={eventData.locations.length}
-              />
+              <StatsSection analytics={eventData.analytics} />
             </div>
           );
         }
