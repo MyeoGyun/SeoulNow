@@ -88,7 +88,6 @@ def _parse_datetime(value: str | None) -> datetime | None:
     if parsed.tzinfo is None:
         return parsed.replace(tzinfo=timezone.utc)
     return parsed.astimezone(timezone.utc)
-    return None
 
 
 def _parse_date(value: str | None) -> date | None:

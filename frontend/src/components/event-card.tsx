@@ -1,9 +1,9 @@
 "use client";
 
-import Image from "next/image";
-
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { FavoriteButton } from "@/components/favorite-button";
+import { ProxyImage } from "@/components/proxy-image";
 import type { Event, Weather } from "@/lib/api-client";
 import { CalendarDays, MapPin, Ticket } from "lucide-react";
 
@@ -28,7 +28,7 @@ export function EventCard({ event, weather, dateRange }: EventCardProps) {
       <a href={eventUrl} target={isExternal ? "_blank" : undefined} rel={isExternal ? "noreferrer" : undefined} className="flex h-full flex-col">
         {event.main_img ? (
           <div className="relative aspect-[4/3] w-full overflow-hidden bg-muted/10">
-            <Image
+            <ProxyImage
               src={event.main_img}
               alt={event.title}
               fill
@@ -36,10 +36,18 @@ export function EventCard({ event, weather, dateRange }: EventCardProps) {
               loading="lazy"
               className="object-contain p-4 transition duration-500 group-hover:scale-[1.02]"
             />
+            {/* 즐겨찾기 버튼 */}
+            <div className="absolute top-2 right-2">
+              <FavoriteButton event={event} />
+            </div>
           </div>
         ) : (
-          <div className="flex aspect-[4/3] w-full items-center justify-center bg-muted/10 text-xs text-muted-foreground">
+          <div className="relative flex aspect-[4/3] w-full items-center justify-center bg-muted/10 text-xs text-muted-foreground">
             이미지 준비 중
+            {/* 즐겨찾기 버튼 */}
+            <div className="absolute top-2 right-2">
+              <FavoriteButton event={event} />
+            </div>
           </div>
         )}
         <div className="flex flex-1 flex-col gap-4 p-4">

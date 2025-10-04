@@ -1,52 +1,64 @@
 "use client";
 
-import { useRef, useEffect, useState } from "react";
-import Image from "next/image";
+import { useRef, useEffect, useState, useMemo, useCallback } from "react";
+import { FavoriteButton } from "@/components/favorite-button";
+import { ProxyImage } from "@/components/proxy-image";
 import type { Event } from "@/lib/api-client";
 
 type EventCarouselProps = {
   events: Event[];
 };
 
-function calculateDDay(dateString: string | null | undefined): string {
-  if (!dateString) return "";
-  
-  const eventDate = new Date(dateString);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  eventDate.setHours(0, 0, 0, 0);
-  
-  const diffTime = eventDate.getTime() - today.getTime();
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  
-  if (diffDays === 0) return "D-DAY";
-  if (diffDays < 0) return `D+${Math.abs(diffDays)}`;
-  return `D-${diffDays}`;
-}
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 export function EventCarousel({ events }: EventCarouselProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isHovered, setIsHovered] = useState(false);
   
-  // 오늘부터 +13일(총 14일) 행사 필터링
-  const getUpcomingEvents = () => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    const endDate = new Date(today);
-    endDate.setDate(today.getDate() + 13); // 당일 포함하여 +13일
-    endDate.setHours(23, 59, 59, 999);
-    
-    return events.filter(event => {
-      if (!event.start_date) return false;
-      
+  const now = useMemo(() => new Date(), []);
+  const todayUtc = useMemo(
+    () => Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+    [now]
+  );
+  const endUtc = useMemo(() => todayUtc + 13 * MS_PER_DAY, [todayUtc]);
+
+  const normalizeToUtcStartOfDay = useCallback((value: Date | null): number | null => {
+    if (!value) {
+      return null;
+    }
+    return Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate());
+  }, []);
+
+  const upcomingEvents = useMemo(() => {
+    return events.filter((event) => {
+      if (!event.start_date) {
+        return false;
+      }
       const eventDate = new Date(event.start_date);
-      return eventDate >= today && eventDate <= endDate;
+      const eventUtc = normalizeToUtcStartOfDay(eventDate);
+      if (eventUtc === null) {
+        return false;
+      }
+      return eventUtc >= todayUtc && eventUtc <= endUtc;
     });
-  };
-  
-  const upcomingEvents = getUpcomingEvents();
+  }, [events, todayUtc, endUtc, normalizeToUtcStartOfDay]);
+
+  const calculateDDay = useCallback(
+    (dateString: string | null | undefined): string => {
+      if (!dateString) return "";
+      const eventDate = new Date(dateString);
+      const eventUtc = normalizeToUtcStartOfDay(eventDate);
+      if (eventUtc === null) {
+        return "";
+      }
+      const diffDays = Math.ceil((eventUtc - todayUtc) / MS_PER_DAY);
+      if (diffDays === 0) return "D-DAY";
+      if (diffDays < 0) return `D+${Math.abs(diffDays)}`;
+      return `D-${diffDays}`;
+    },
+    [normalizeToUtcStartOfDay, todayUtc]
+  );
 
   // 특정 인덱스로 스크롤하는 함수
   const scrollToIndex = (index: number) => {
@@ -106,16 +118,20 @@ export function EventCarousel({ events }: EventCarouselProps) {
     };
 
     // throttle을 위한 래퍼
-    let timeoutId: NodeJS.Timeout;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
     const throttledHandleScroll = () => {
-      clearTimeout(timeoutId);
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId);
+      }
       timeoutId = setTimeout(handleScroll, 50);
     };
 
     scrollContainer.addEventListener('scroll', throttledHandleScroll, { passive: true });
     return () => {
       scrollContainer.removeEventListener('scroll', throttledHandleScroll);
-      clearTimeout(timeoutId);
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId);
+      }
     };
   }, [upcomingEvents.length, currentIndex]);
 
@@ -153,10 +169,11 @@ export function EventCarousel({ events }: EventCarouselProps) {
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
       >
-        {upcomingEvents.map((event) => {
+        {upcomingEvents.map((event, index) => {
           const dDay = calculateDDay(event.start_date);
           const eventUrl = event.hmpg_addr ?? event.org_link ?? "#";
           const isExternal = eventUrl.startsWith("http");
+          const isFirstImage = index === 0; // 첫 번째 이미지는 priority 적용
 
           return (
             <div
@@ -173,14 +190,20 @@ export function EventCarousel({ events }: EventCarouselProps) {
                 <div className="relative mb-2 md:mb-4">
                   {event.main_img ? (
                     <div className="relative aspect-[3/4] w-full overflow-hidden rounded-md md:rounded-lg bg-muted/10 shadow-sm md:shadow-md">
-                      <Image
+                      <ProxyImage
                         src={event.main_img}
                         alt={event.title}
                         fill
                         sizes="(max-width: 768px) 50vw, (max-width: 1024px) 33vw, 25vw"
-                        loading="lazy"
+                        priority={isFirstImage}
+                        loading={isFirstImage ? undefined : "lazy"}
                         className="object-cover transition duration-300 group-hover:scale-105"
                       />
+                      
+                      {/* 즐겨찾기 버튼 */}
+                      <div className="absolute top-2 left-2 md:top-3 md:left-3">
+                        <FavoriteButton event={event} size="sm" />
+                      </div>
                       
                       {dDay && (
                         <div className="absolute top-2 right-2 md:top-3 md:right-3">

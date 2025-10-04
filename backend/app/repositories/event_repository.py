@@ -40,7 +40,11 @@ class EventRepository:
                 set_=update_columns,
             )
             result = await self.session.execute(statement)
-            total_processed += result.rowcount or len(batch)
+            rowcount = result.rowcount
+            if rowcount is None or rowcount < 0:
+                total_processed += len(batch)
+            else:
+                total_processed += rowcount
 
         await self.session.commit()
         return total_processed

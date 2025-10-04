@@ -7,6 +7,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
+from app.db.utils import utcnow
 
 
 class UserAction(Base):
@@ -18,5 +19,5 @@ class UserAction(Base):
     user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     action_type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     target_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
-    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     metadata_json: Mapped[dict | None] = mapped_column("metadata", JSONB, nullable=True)

@@ -1,6 +1,41 @@
 import "server-only";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api";
+const DEFAULT_API_BASE_URL = "http://localhost:8000/api";
+
+const readEnv = (key: string): string | undefined => {
+  if (typeof process === "undefined" || typeof process.env === "undefined") {
+    return undefined;
+  }
+
+  // Access with bracket notation to keep runtime resolution even after bundling.
+  const value = process.env[key];
+  if (typeof value === "string" && value.trim().length > 0) {
+    return value.trim();
+  }
+  return undefined;
+};
+
+let cachedApiBaseUrl: string | null = null;
+
+const resolveApiBaseUrl = (): string => {
+  if (cachedApiBaseUrl) {
+    return cachedApiBaseUrl;
+  }
+
+  const envValue =
+    readEnv("NEXT_PUBLIC_API_BASE_URL") ?? readEnv("NEXT_PUBLIC_API_URL") ?? readEnv("API_BASE_URL");
+
+  const rawBase = envValue ?? DEFAULT_API_BASE_URL;
+
+  if (rawBase.startsWith("http://") || rawBase.startsWith("https://")) {
+    cachedApiBaseUrl = rawBase.replace(/\/$/, "");
+    return cachedApiBaseUrl;
+  }
+
+  const normalized = rawBase.startsWith("/") ? rawBase : `/${rawBase}`;
+  cachedApiBaseUrl = normalized.replace(/\/$/, "");
+  return cachedApiBaseUrl;
+};
 
 export type Event = {
   id: number;
@@ -70,7 +105,8 @@ export type EventListResponse = {
 };
 
 async function request<T>(endpoint: string, init?: RequestInit, { revalidate = 300 }: { revalidate?: number } = {}): Promise<T> {
-  const url = `${API_BASE_URL}${endpoint}`;
+  const baseUrl = resolveApiBaseUrl();
+  const url = `${baseUrl}${endpoint}`;
 
   const response = await fetch(url, {
     ...init,

@@ -33,4 +33,7 @@ class WeatherRepository:
 
         result = await self.session.execute(statement)
         await self.session.commit()
-        return result.rowcount or len(payloads)
+        rowcount = result.rowcount
+        if rowcount is None or rowcount < 0:
+            return len(payloads)
+        return rowcount
