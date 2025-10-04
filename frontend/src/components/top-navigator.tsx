@@ -32,6 +32,7 @@ export function TopNavigator({ className }: { className?: string }) {
       params.delete("view");
     } else {
       params.set("view", targetId);
+      params.delete("page");
     }
 
     const queryString = params.toString();
