@@ -19,8 +19,8 @@ function extractPrices(text: string): number[] {
   
   const prices: number[] = [];
   
-  // 1. 쉼표가 포함된 숫자 패턴 (예: 20,000원, 1,500원)
-  const commaPattern = /(\d{1,3}(?:,\d{3})+)\s*원/g;
+  // 1. 쉼표가 포함된 숫자 패턴 (예: 20,000원, 1,500원, VIP석 20,000원)
+  const commaPattern = /(?:[a-zA-Z가-힣]*석?\s*)?(\d{1,3}(?:,\d{3})+)\s*원/g;
   const commaMatches = text.matchAll(commaPattern);
   for (const match of commaMatches) {
     const numStr = match[1].replace(/,/g, '');
@@ -30,8 +30,8 @@ function extractPrices(text: string): number[] {
     }
   }
   
-  // 2. 한글 숫자 표현 (예: 3만원, 5천원)
-  const koreanNumberPattern = /(\d+)\s*(만|천)\s*원/g;
+  // 2. 한글 숫자 표현 - 향상된 패턴 (예: 3만원, 5천원, VIP석 15만원, R석 12만원)
+  const koreanNumberPattern = /(?:[a-zA-Z]*석?\s*)?(\d+)\s*(만|천)\s*원/g;
   const koreanMatches = text.matchAll(koreanNumberPattern);
   for (const match of koreanMatches) {
     const num = parseInt(match[1], 10);
@@ -48,12 +48,12 @@ function extractPrices(text: string): number[] {
   }
   
   // 3. 일반 숫자 패턴 (예: 5000원) - 한글 숫자와 중복되지 않도록 체크
-  const normalPattern = /(\d{4,})\s*원/g;
+  const normalPattern = /(?:[a-zA-Z가-힣]*석?\s*)?(\d{4,})\s*원/g;
   const normalMatches = text.matchAll(normalPattern);
   for (const match of normalMatches) {
     const num = parseInt(match[1], 10);
     if (!isNaN(num) && num > 0) {
-      // 이미 한글 숫자로 파싱된 것과 중복되지 않도록 체크
+      // 이미 파싱된 것과 중복되지 않도록 체크
       if (!prices.includes(num)) {
         prices.push(num);
       }
@@ -77,7 +77,8 @@ function extractPartialPaidInfo(text: string): string | null {
     /별도\s*비용\s*\(([^)]+)\)/,
     /추가\s*비용\s*\(([^)]+)\)/,
     /(재료비|교재비|체험비)\s*별도/,
-    /(재료비|교재비|체험비)\s*:\s*([^,\n]+)/
+    /(재료비|교재비|체험비|입장료)\s*:\s*([^,\n]+)/,
+    /\*\s*([^:]+)\s*:\s*([^/\n]+)/
   ];
   
   for (const pattern of partialPaidPatterns) {
@@ -127,9 +128,105 @@ function checkIsFree(text: string): boolean {
 }
 
 /**
+ * 좌석별 가격 정보를 추출합니다
+ */
+function extractSeatPrices(text: string): { seatType: string; price: number }[] {
+  if (!text) return [];
+  
+  const seatPrices: { seatType: string; price: number }[] = [];
+  
+  // VIP석, R석, S석, A석 등의 좌석 타입과 가격 매칭
+  const seatPatterns = [
+    // VIP석 15만원, R석 12만원 형태
+    /([VIPRS석]+|전석|일반석|프리미엄석)\s*(\d+)\s*(만|천)\s*원/g,
+    // VIP석 150,000원, R석 120,000원 형태
+    /([VIPRS석]+|전석|일반석|프리미엄석)\s*(\d{1,3}(?:,\d{3})+)\s*원/g,
+    // VIP석 50000원 형태
+    /([VIPRS석]+|전석|일반석|프리미엄석)\s*(\d{4,})\s*원/g
+  ];
+  
+  for (const pattern of seatPatterns) {
+    const matches = text.matchAll(pattern);
+    for (const match of matches) {
+      const seatType = match[1];
+      let price: number;
+      
+      if (match[3]) { // 한글 숫자 (만원, 천원)
+        const num = parseInt(match[2], 10);
+        const unit = match[3];
+        if (unit === '만') {
+          price = num * 10000;
+        } else if (unit === '천') {
+          price = num * 1000;
+        } else {
+          continue;
+        }
+      } else { // 일반 숫자
+        const numStr = match[2].replace(/,/g, '');
+        price = parseInt(numStr, 10);
+      }
+      
+      if (!isNaN(price) && price > 0) {
+        seatPrices.push({ seatType, price });
+      }
+    }
+  }
+  
+  return seatPrices;
+}
+
+/**
+ * 프로모션 가격 정보를 추출합니다 (할인가, 정가)
+ */
+function extractPromotionalPricing(text: string): { discountPrice: number | null; regularPrice: number | null; description: string | null } {
+  if (!text) return { discountPrice: null, regularPrice: null, description: null };
+  
+  // 할인: 3,000원(정가 5,000원) 형태
+  const promotionPattern = /(할인|오픈기념할인|특가)\s*:\s*(\d{1,3}(?:,\d{3})+|\d+)\s*원?\s*\(\s*정가\s*(\d{1,3}(?:,\d{3})+|\d+)\s*원\s*\)/;
+  const match = text.match(promotionPattern);
+  
+  if (match) {
+    const description = match[1];
+    const discountPrice = parseInt(match[2].replace(/,/g, ''), 10);
+    const regularPrice = parseInt(match[3].replace(/,/g, ''), 10);
+    
+    if (!isNaN(discountPrice) && !isNaN(regularPrice)) {
+      return { discountPrice, regularPrice, description };
+    }
+  }
+  
+  return { discountPrice: null, regularPrice: null, description: null };
+}
+
+/**
  * 가격 범위 텍스트를 파싱합니다 (예: "20,000원~50,000원")
  */
 function parseRangePrice(text: string): { min: number | null; max: number | null } {
+  // 한글 숫자 범위 (3만원~5만원)
+  const koreanRangePattern = /(\d+)\s*(만|천)\s*원\s*[-~]\s*(\d+)\s*(만|천)\s*원/;
+  const koreanMatch = text.match(koreanRangePattern);
+  
+  if (koreanMatch) {
+    const num1 = parseInt(koreanMatch[1], 10);
+    const unit1 = koreanMatch[2];
+    const num2 = parseInt(koreanMatch[3], 10);
+    const unit2 = koreanMatch[4];
+    
+    let min = num1;
+    let max = num2;
+    
+    if (unit1 === '만') min *= 10000;
+    else if (unit1 === '천') min *= 1000;
+    
+    if (unit2 === '만') max *= 10000;
+    else if (unit2 === '천') max *= 1000;
+    
+    if (!isNaN(min) && !isNaN(max)) {
+      return { min: Math.min(min, max), max: Math.max(min, max) };
+    }
+  }
+  
+  // 일반 숫자 범위 (20,000원~50,000원)
   const rangePattern = /(\d{1,3}(?:,\d{3})*)\s*원?\s*[-~]\s*(\d{1,3}(?:,\d{3})*)\s*원/;
   const match = text.match(rangePattern);
   
@@ -138,7 +235,7 @@ function parseRangePrice(text: string): { min: number | null; max: number | null
     const max = parseInt(match[2].replace(/,/g, ''), 10);
     
     if (!isNaN(min) && !isNaN(max)) {
-      return { min, max };
+      return { min: Math.min(min, max), max: Math.max(min, max) };
     }
   }
   
@@ -180,6 +277,48 @@ export function parsePriceInfo(
       displayText: '무료',
       rawText,
       hasMultiplePrices: false
+    };
+  }
+  
+  // 프로모션 가격 정보 확인 (할인가, 정가)
+  const promotionalPricing = extractPromotionalPricing(rawText);
+  if (promotionalPricing.discountPrice !== null && promotionalPricing.regularPrice !== null) {
+    return {
+      isFree: false,
+      minPrice: promotionalPricing.discountPrice,
+      maxPrice: promotionalPricing.regularPrice,
+      displayText: `${formatPrice(promotionalPricing.discountPrice)} (${promotionalPricing.description})`,
+      rawText,
+      hasMultiplePrices: true
+    };
+  }
+  
+  // 좌석별 가격 정보 확인
+  const seatPrices = extractSeatPrices(rawText);
+  if (seatPrices.length > 0) {
+    const prices = seatPrices.map(seat => seat.price);
+    const minPrice = Math.min(...prices);
+    const maxPrice = Math.max(...prices);
+    const hasMultiplePrices = prices.length > 1;
+    
+    let displayText: string;
+    if (hasMultiplePrices) {
+      if (minPrice === maxPrice) {
+        displayText = formatPrice(minPrice);
+      } else {
+        displayText = `${formatPrice(minPrice)}부터`;
+      }
+    } else {
+      displayText = formatPrice(minPrice);
+    }
+    
+    return {
+      isFree: false,
+      minPrice,
+      maxPrice,
+      displayText,
+      rawText,
+      hasMultiplePrices
     };
   }
   
