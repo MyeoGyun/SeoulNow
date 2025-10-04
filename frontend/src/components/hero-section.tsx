@@ -26,7 +26,7 @@ export function HeroSection({ events }: HeroSectionProps) {
             <h2 className="text-2xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
               다가오는 행사
             </h2>
-            <p className="text-sm text-muted-foreground">이번주에 진행되는 문화 행사를 확인하세요</p>
+            <p className="text-sm text-muted-foreground">앞으로 2주간의 다가오는 행사를 확인하세요</p>
           </div>
         </div>
         <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
