@@ -6,6 +6,7 @@ import { FavoriteButton } from "@/components/favorite-button";
 import { ProxyImage } from "@/components/proxy-image";
 import type { Event, Weather } from "@/lib/api-client";
 import { CalendarDays, MapPin, Ticket } from "lucide-react";
+import { parsePriceInfo, getSimplePriceDisplay } from "@/lib/price-utils";
 
 import { WeatherSummary } from "@/components/weather-summary";
 
@@ -16,9 +17,39 @@ export type EventCardProps = {
 };
 
 export function EventCard({ event, weather, dateRange }: EventCardProps) {
-  const eventUrl = event.hmpg_addr ?? event.org_link ?? "#";
+  // URL 처리 및 보안 개선
+  let eventUrl = event.hmpg_addr ?? event.org_link ?? "#";
   const isExternal = eventUrl.startsWith("http");
-  const feeInfo = (event.use_fee ?? "").trim() || (event.ticket ?? "").trim();
+  
+  // SSL 문제가 있는 도메인들을 HTTP로 강제 변경
+  const problematicDomains = ['culture.seoul.go.kr', 'data.seoul.go.kr'];
+  if (isExternal) {
+    try {
+      const urlObj = new URL(eventUrl);
+      if (problematicDomains.includes(urlObj.hostname) && urlObj.protocol === 'https:') {
+        eventUrl = eventUrl.replace('https://', 'http://');
+      }
+    } catch (error) {
+      // URL 파싱 실패 시 원본 URL 유지
+      console.warn('Invalid URL:', eventUrl, error);
+    }
+  }
+  
+  // 가격 정보 파싱
+  const priceInfo = parsePriceInfo(event.use_fee, event.ticket, event.is_free);
+  const priceDisplay = getSimplePriceDisplay(priceInfo);
+  
+  // 디버깅 로그 (개발 환경에서만)
+  if (process.env.NODE_ENV === 'development' && Math.random() < 0.1) {
+    console.log('EventCard price debug:', {
+      title: event.title,
+      use_fee: event.use_fee,
+      ticket: event.ticket,
+      is_free: event.is_free,
+      priceInfo,
+      priceDisplay
+    });
+  }
 
   const hasWeatherData =
     weather !== null && [weather.temp, weather.rain_prob, weather.pm10].some((value) => value !== null && value !== undefined);
@@ -58,11 +89,15 @@ export function EventCard({ event, weather, dateRange }: EventCardProps) {
                   {event.codename}
                 </Badge>
               )}
-              {event.is_free && (
-                <Badge variant="outline" className="border-primary/30 text-primary">
-                  {event.is_free}
-                </Badge>
-              )}
+              <Badge 
+                variant={priceInfo.isFree ? "outline" : "secondary"} 
+                className={priceInfo.isFree 
+                  ? "border-green-500/30 text-green-600 bg-green-50" 
+                  : "border-blue-500/30 text-blue-600 bg-blue-50"
+                }
+              >
+                {priceInfo.isFree ? "무료" : "유료"}
+              </Badge>
             </div>
             {event.guname && (
               <Badge variant="outline" className="border-primary/40 bg-primary/10 text-primary">
@@ -86,11 +121,11 @@ export function EventCard({ event, weather, dateRange }: EventCardProps) {
                 </span>
               </span>
             )}
-            {feeInfo && (
+            {priceDisplay && priceDisplay !== '가격 문의' && (
               <span className="inline-flex max-w-full items-center gap-1 rounded-lg border border-border/60 bg-background/80 px-2 py-1">
                 <Ticket className="h-4 w-4 min-w-[1rem] text-primary" />
                 <span className="line-clamp-1 max-w-[12rem] sm:max-w-[9rem] lg:max-w-[10rem] xl:max-w-[12rem]">
-                  {feeInfo}
+                  {priceDisplay}
                 </span>
               </span>
             )}
